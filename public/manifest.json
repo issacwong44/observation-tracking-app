@@ -1,0 +1,15 @@
+{
+  "name": "Observation Dashboard",
+  "short_name": "OBS Dashboard",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#F4F6F8",
+  "theme_color": "#0078AE",
+  "icons": [
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
