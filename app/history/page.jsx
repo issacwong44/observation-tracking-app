@@ -58,8 +58,8 @@ const filteredHistoryCases = historyCases.filter((item) => {
   />
 
        <div className="bg-white rounded-3xl p-6 shadow">
-        <div className="rounded-3xl overflow-hidden border border-gray-200"></div>
- <table className="w-full border-separate border-spacing-0">
+        <div className="rounded-3xl overflow-x-auto border border-gray-200">
+ <table className="min-w-[1000px] w-full border-separate border-spacing-0">
             <thead>
               <tr className="bg-[#0078AE] text-white">
                 <th className="p-4 border-b">Bed</th>
@@ -70,7 +70,7 @@ const filteredHistoryCases = historyCases.filter((item) => {
                 <th className="p-4 border-b">Remarks</th>
                 <th className="p-4 border-b">Ack. Tiime</th>
 <th className="p-4 border-b">VS Time</th>
-<th className="p-4 border-b">Discharge Time</th>
+<th className="p-4 border-b">Discharge</th>
               </tr>
             </thead>
 
@@ -103,6 +103,7 @@ const filteredHistoryCases = historyCases.filter((item) => {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
       </div>
       <div className="fixed bottom-4 left-0 w-full px-4 z-50">

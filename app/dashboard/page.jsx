@@ -276,32 +276,40 @@ const filteredCases = sortedCases.filter((item) => {
 
 
   return (
-    <div className="min-h-screen bg-[#f4f6f8] pb-40">
+    <div className="min-h-screen bg-[#f4f6f8] pb-32 md:pb-40">
 
-      <div className="bg-[#0078AE] hover:bg-[#00638F] px-8 py-6 shadow-lg">
-        <h1 className="text-3xl font-bold text-white">
-          Observation Room Tracking Dashboard
-        </h1>
-        <p className="text-white/80 mt-1">
-          NDH AED
-        </p>
-        <div className="text-right">
-    <p className="text-sm text-white">
-      Current Time
-    </p>
+<div className="bg-[#0078AE] hover:bg-[#00638F] px-4 md:px-8 py-4 md:py-6 shadow-lg">
+  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 
-    <p className="text-2xl font-bold text-white">
-      {currentTime}
+    <div>
+      <h1 className="text-xl md:text-3xl font-bold text-white">
+        Observation Room Tracking Dashboard
+      </h1>
+
+      <p className="text-white/80 mt-1 text-sm md:text-base">
+        NDH AED
+      </p>
+    </div>
+
+    <div className="text-left md:text-right">
+      <p className="text-xs md:text-sm text-white">
+        Current Time
+      </p>
+
+      <p className="text-base md:text-2xl font-bold text-white mt-1">
+    {currentTime || '--'}
     </p>
+    </div>
+
   </div>
-      </div>
+</div>
 
       <div className="p-8 space-y-6">
 
      {/* Top row */}
-<div className="grid grid-cols-12 gap-6">
+<div className="grid grid-cols-1 md:grid-cols-12 gap-4 md:gap-6">
 
- <div className="col-span-3 bg-gradient-to-br from-[#245C8F] to-[#3D8CA8] rounded-3xl p-8 shadow text-white">
+ <div className="col-span-1 md:col-span-3 bg-gradient-to-br from-[#245C8F] to-[#3D8CA8] rounded-3xl p-8 shadow text-white">
   <p className="text-xl font-bold">
     Total patients in<br />Observation Room
   </p>
@@ -315,7 +323,7 @@ const filteredCases = sortedCases.filter((item) => {
   </div>
 </div>
 
-  <div className="col-span-4 bg-white rounded-3xl p-8 shadow">
+  <div className="col-span-1 md:col-span-4 bg-white rounded-3xl p-8 shadow">
     <h2 className="text-xl font-bold mb-8">
       Pending Acknowledgement ({pendingAck.length})
     </h2>
@@ -350,7 +358,7 @@ const filteredCases = sortedCases.filter((item) => {
     </div>
   </div>
 
-  <div className="col-span-5 bg-white rounded-3xl p-8 shadow">
+  <div className="col-span-1 md:col-span-5 bg-white rounded-3xl p-8 shadow">
     <h2 className="text-xl font-bold mb-8">
       Pending VS ({pendingVS.length})
     </h2>
@@ -389,7 +397,7 @@ const filteredCases = sortedCases.filter((item) => {
 
 
 {/* Second row */}
-<div className="grid grid-cols-5 gap-6">
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
 
  <SmallCard
   title="Fall Risk"
@@ -440,31 +448,30 @@ const filteredCases = sortedCases.filter((item) => {
 />
 </div>
 
-      <div className="flex justify-between items-start mb-6">
+     <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
 
   {/* LEFT SIDE */}
-  <div>
-    <h2 className="text-3xl font-bold mb-6">
-      Patient List
-    </h2>
+  <div className="w-full">
+   <div className="mb-2">
+      <h2 className="text-3xl font-bold mb-4">
+        Patient List
+      </h2>
 
-    <input
-      type="text"
-      placeholder="Search Bed / Handover / Remarks"
-      value={searchTerm}
-      onChange={(e) => setSearchTerm(e.target.value)}
-      className="border border-gray-300 rounded-2xl px-4 py-3 w-[320px] shadow-sm outline-none focus:ring-2 focus:ring-[#0078AE]"
-    />
-  </div>
+      <input
+    type="text"
+    placeholder="Search Bed / Handover / Remarks"
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    className="border border-gray-300 rounded-2xl px-4 py-3 w-[220px] md:w-[360px] shadow-sm outline-none focus:ring-2 focus:ring-[#0078AE]"
+  />
+</div>
 
-  {/* RIGHT SIDE */}
-  <div className="flex flex-col items-end gap-4">
-
-    {/* VIEW BUTTON */}
-    <div className="flex gap-3">
+    {/* MOBILE: view buttons under search */}
+    <div className="flex md:hidden gap-3 mb-4">
+     <div className="flex w-full md:w-auto gap-3">
       <button
         onClick={() => setViewMode('table')}
-        className={`px-5 py-3 rounded-2xl font-bold ${
+       className={`flex-1 md:flex-none px-5 py-3 rounded-2xl font-bold ${
           viewMode === 'table'
             ? 'bg-[#0078AE] hover:bg-[#00638F] text-white'
             : 'bg-white text-gray-500 border'
@@ -472,10 +479,37 @@ const filteredCases = sortedCases.filter((item) => {
       >
         Table View
       </button>
-
-      <button
+       <button
         onClick={() => setViewMode('bed')}
-        className={`px-5 py-3 rounded-2xl font-bold ${
+        className={`flex-1 md:flex-none px-5 py-3 rounded-2xl font-bold ${
+          viewMode === 'bed'
+            ? 'bg-[#0078AE] hover:bg-[#00638F] text-white'
+            : 'bg-white text-gray-500 border'
+        }`}
+      >
+        Bed View
+      </button>
+      </div>
+    </div>
+  </div>
+
+  {/* RIGHT SIDE - DESKTOP ONLY */}
+  <div className="hidden md:flex flex-col items-end gap-3">
+    {/* View buttons */}
+    <div className="flex gap-3">
+      <button
+        onClick={() => setViewMode('table')}
+       className={`w-[120px] h-[48px] rounded-2xl font-bold flex items-center justify-center ${
+          viewMode === 'table'
+            ? 'bg-[#0078AE] hover:bg-[#00638F] text-white'
+            : 'bg-white text-gray-500 border'
+        }`}
+      >
+        Table View
+      </button>
+       <button
+        onClick={() => setViewMode('bed')}
+       className={`w-[120px] h-[48px] rounded-2xl font-bold flex items-center justify-center ${
           viewMode === 'bed'
             ? 'bg-[#0078AE] hover:bg-[#00638F] text-white'
             : 'bg-white text-gray-500 border'
@@ -485,7 +519,7 @@ const filteredCases = sortedCases.filter((item) => {
       </button>
     </div>
 
-    {/* SORTING */}
+    {/* Sorting under view buttons */}
     <select
       value={sortBy}
       onChange={(e) => setSortBy(e.target.value)}
@@ -497,13 +531,28 @@ const filteredCases = sortedCases.filter((item) => {
       <option value="cat_desc">Category 5 → 1</option>
       <option value="status">Status</option>
     </select>
-
   </div>
+
+  {/* MOBILE: sorting under view buttons */}
+  <div className="md:hidden w-full">
+    <select
+      value={sortBy}
+      onChange={(e) => setSortBy(e.target.value)}
+      className="w-full bg-white border border-gray-300 rounded-2xl px-5 py-3 font-bold text-gray-700 shadow-sm"
+    >
+      <option value="time_desc">Time: New to Old</option>
+      <option value="time_asc">Time: Old to New</option>
+      <option value="cat_asc">Category 1 → 5</option>
+      <option value="cat_desc">Category 5 → 1</option>
+      <option value="status">Status</option>
+    </select>
+  </div>
+
 </div>
 
          {viewMode === 'table' && (
   <div className="bg-white rounded-3xl shadow overflow-x-auto">
-         <table className="w-full border-collapse overflow-hidden rounded-3xl">
+         <table className="min-w-[1100px] w-full border-collapse overflow-hidden rounded-3xl">
 
   <thead>
     <tr className="bg-[#0078AE] text-white">
@@ -559,7 +608,7 @@ const filteredCases = sortedCases.filter((item) => {
           {item.age}
         </td>
 
-        <td className="p-5 border border-gray-200">
+        <td className="p-5 border border-gray-200 text-center align-middle">
           <CategoryBadge category={item.category} />
         </td>
 
@@ -674,7 +723,7 @@ const filteredCases = sortedCases.filter((item) => {
   }`}
   onClick={(e) => {
   e.stopPropagation()
-  setActionModal({ type: 'ack', item })
+  setActionModal({ type: 'vs', item })
 }}
 >
   VS
@@ -689,7 +738,7 @@ const filteredCases = sortedCases.filter((item) => {
   }`}
   onClick={(e) => {
   e.stopPropagation()
-  setActionModal({ type: 'ack', item })
+  setActionModal({ type: 'dc', item })
 }}
 >
   D/C
@@ -709,7 +758,7 @@ const filteredCases = sortedCases.filter((item) => {
 
 
 {viewMode === 'bed' && (
-  <div className="grid grid-cols-4 gap-4">
+  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
     {filteredCases.map((item) => (
       <BedCaseCard
   key={item.id}
@@ -1117,7 +1166,7 @@ function SmallCard({ title, list, icon, color, onViewAll, extraButton }) {
 
 
         ))}
-       <div className="fixed bottom-4 left-0 w-full px-4 z-50">
+      <div className="fixed bottom-0 left-0 w-full px-4 pb-[env(safe-area-inset-bottom)] z-50">
 
   <div className="grid grid-cols-2 gap-3">
 
@@ -1233,8 +1282,10 @@ function BedCaseCard({
           </div>
           <div className="flex gap-2 mt-5">
   <button
-    onClick={(e) => { e.stopPropagation(); setActionModal({ type: 'vs', item }) }}
-    disabled={item.acknowledged_at}
+     onClick={(e) => {
+    e.stopPropagation()
+    setActionModal({ type: 'ack', item })
+  }}
     className={`px-4 py-2 rounded-xl font-bold text-sm ${
       item.acknowledged_at
         ? 'bg-gray-200 text-gray-400'
@@ -1245,8 +1296,10 @@ function BedCaseCard({
   </button>
 
   <button
-   onClick={(e) => { e.stopPropagation(); setActionModal({ type: 'vs', item }) }}
-    disabled={!item.acknowledged_at || item.vs_taken_at}
+    onClick={(e) => {
+    e.stopPropagation()
+    setActionModal({ type: 'vs', item })
+  }}
     className={`px-4 py-2 rounded-xl font-bold text-sm ${
       !item.acknowledged_at || item.vs_taken_at
         ? 'bg-gray-200 text-gray-400'
@@ -1257,8 +1310,10 @@ function BedCaseCard({
   </button>
 
   <button
-    onClick={(e) => { e.stopPropagation(); setActionModal({ type: 'vs', item }) }}
-    disabled={!item.vs_taken_at}
+     onClick={(e) => {
+    e.stopPropagation()
+    setActionModal({ type: 'dc', item })
+  }}
     className={`px-4 py-2 rounded-xl font-bold text-sm ${
       !item.vs_taken_at
         ? 'bg-gray-200 text-gray-400'
@@ -1292,7 +1347,7 @@ function CategoryBadge({ category }) {
 
   return (
     <span
-      className="px-4 py-2 rounded-2xl font-bold"
+     className="inline-flex items-center justify-center whitespace-nowrap px-4 py-2 rounded-2xl font-bold"
       style={{
         backgroundColor: bg,
         color: color
@@ -1407,7 +1462,7 @@ function ObservationStatus({ status }) {
 
  return (
   <span
-    className={`px-4 py-2 rounded-2xl font-bold ${
+    className={`inline-flex items-center justify-center whitespace-nowrap px-4 py-2 rounded-2xl font-bold ${
       text === 'Pending' ? 'animate-pulse' : ''
     }`}
     style={{ backgroundColor: bg, color }}

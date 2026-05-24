@@ -93,14 +93,14 @@ async function handleSubmit(e) {
 }
 
   return (
-<div className="min-h-screen bg-[#f4f6f8] pb-40">
+<div className="min-h-screen bg-[#f4f6f8] pb-40 px-4 py-4 md:px-8">
 
-    <div className="bg-[#0078AE] hover:bg-[#00638F] px-6 py-5 shadow-lg">
+    <div className="bg-[#0078AE] hover:bg-[#00638F] px-4 md:px-6 py-4 md:py-5 shadow-lg rounded-2xl">
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
 
         <div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-2xl md:text-3xl font-bold text-white">
             Observation Room Case Tracking
           </h1>
 
@@ -117,7 +117,7 @@ async function handleSubmit(e) {
 
     </div>
 
-    <div className="p-6">
+    <div className="p-4 md:p-6">
      <form onSubmit={handleSubmit} className="space-y-6">
         <div>
           <label className="block font-bold mb-2">Gender</label>
@@ -125,7 +125,7 @@ async function handleSubmit(e) {
               <button
     type="button"
     onClick={() => setGender('M')}
-    className={`px-6 py-4 rounded-2xl text-xl transition ${
+    className={`flex-1 md:flex-none px-4 md:px-6 py-3 md:py-4 rounded-2xl text-lg md:text-xl transition ${
       gender === 'M'
         ? 'text-white'
         : 'bg-gray-200 text-gray-700'
@@ -140,7 +140,7 @@ async function handleSubmit(e) {
             <button
     type="button"
     onClick={() => setGender('F')}
-    className={`px-6 py-4 rounded-2xl text-xl transition ${
+   className={`flex-1 md:flex-none px-4 md:px-6 py-3 md:py-4 rounded-2xl text-lg md:text-xl transition ${
       gender === 'F'
         ? 'text-white'
         : 'bg-gray-200 text-gray-700'
@@ -164,7 +164,7 @@ async function handleSubmit(e) {
           />
         </div>
 
-<div className="grid grid-cols-5 gap-3">
+<div className="grid grid-cols-5 gap-2 md:gap-3">
 
   {['1', '2', '3', '4', '5'].map((cat) => {
 
@@ -233,17 +233,17 @@ async function handleSubmit(e) {
         </div>
 
         <div>
-          <div className="grid grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
             <div>
               <label className="block font-bold mb-2">Fall Risk</label>
-              <div className="flex gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {['Yes', 'No'].map((value) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setFallRisk(value)}
-                   className={`px-6 py-4 rounded-2xl text-xl border-2 transition ${
+                   className={`w-full px-4 md:px-6 py-3 md:py-4 rounded-2xl text-lg md:text-xl border-2 transition ${
   fallRisk === value
     ? 'border-black bg-gray-200 text-black'
     : 'border-transparent bg-gray-200 text-gray-700'
@@ -257,13 +257,13 @@ async function handleSubmit(e) {
 
             <div>
               <label className="block font-bold mb-2">Head Injury</label>
-              <div className="flex gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {['Yes', 'No'].map((value) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setHeadInjury(value)}
-                   className={`px-6 py-4 rounded-2xl text-xl border-2 transition ${
+                   className={`w-full px-4 md:px-6 py-3 md:py-4 rounded-2xl text-lg md:text-xl border-2 transition ${
   headInjury === value
     ? 'border-black bg-gray-200 text-black'
     : 'border-transparent bg-gray-200 text-gray-700'
@@ -277,13 +277,13 @@ async function handleSubmit(e) {
 
             <div>
               <label className="block font-bold mb-2">Q1H Monitoring</label>
-              <div className="flex gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 {['Yes', 'No'].map((value) => (
                   <button
                     key={value}
                     type="button"
                     onClick={() => setQ1h(value)}
-                    className={`px-6 py-4 rounded-2xl text-xl border-2 transition ${
+                    className={`w-full px-4 md:px-6 py-3 md:py-4 rounded-2xl text-lg md:text-xl border-2 transition ${
   q1h === value
     ? 'border-black bg-gray-200 text-black'
     : 'border-transparent bg-gray-200 text-gray-700'
@@ -301,7 +301,7 @@ async function handleSubmit(e) {
        <div>
   <label className="block font-bold mb-2">Nursing Handover</label>
 
-  <div className="grid grid-cols-4 gap-3">
+  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
     {['CTB', 'Urine', 'Hstix', 'IVF', 'Cardiac Mon', 'Restraint', 'Tracking tag', 'Others'].map((item) => (
   <button
     key={item}
@@ -313,7 +313,7 @@ async function handleSubmit(e) {
           : [...prev, item]
       )
     }}
-    className={`px-4 py-4 rounded-2xl text-lg transition ${
+    className={`w-full px-4 py-4 rounded-2xl text-lg transition ${
       handover.includes(item)
         ? 'text-black'
         : 'bg-gray-200 text-gray-700'
