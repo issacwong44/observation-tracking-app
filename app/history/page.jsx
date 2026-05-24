@@ -68,9 +68,9 @@ const filteredHistoryCases = historyCases.filter((item) => {
                 <th className="p-4 border-b">Category</th>
                 <th className="p-4 border-b">Handover</th>
                 <th className="p-4 border-b">Remarks</th>
-                <th className="p-4 border-b">Ack. Tiime</th>
+                <th className="p-4 border-b">Ack. Time</th>
 <th className="p-4 border-b">VS Time</th>
-<th className="p-4 border-b">Discharge</th>
+<th className="p-4 border-b">Discharge Time</th>
               </tr>
             </thead>
 
