@@ -453,7 +453,7 @@ const filteredCases = sortedCases.filter((item) => {
   {/* LEFT SIDE */}
   <div className="w-full">
    <div className="mb-2">
-      <h2 className="text-3xl font-bold mb-4">
+      <h2 className="text-3xl font-bold whitespace-nowrap mb-4">
         Patient List
       </h2>
 
@@ -462,7 +462,10 @@ const filteredCases = sortedCases.filter((item) => {
     placeholder="Search Bed / Handover / Remarks"
     value={searchTerm}
     onChange={(e) => setSearchTerm(e.target.value)}
-    className="border border-gray-300 rounded-2xl px-4 py-3 w-[220px] md:w-[360px] shadow-sm outline-none focus:ring-2 focus:ring-[#0078AE]"
+    className="border border-gray-300 rounded-2xl px-4 py-3
+               w-[220px] md:w-[360px]
+               shadow-sm outline-none
+               focus:ring-2 focus:ring-[#0078AE]"
   />
 </div>
 
