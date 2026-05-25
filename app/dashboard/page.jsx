@@ -133,7 +133,7 @@ async function handleVS(id) {
     .from('observation_cases')
     .update({
       vs_taken_at: new Date().toISOString(),
-      status: 'in_observation'
+      status: 'Pending VS'
     })
     .eq('id', id)
 
