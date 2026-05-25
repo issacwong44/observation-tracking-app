@@ -133,7 +133,7 @@ async function handleVS(id) {
     .from('observation_cases')
     .update({
       vs_taken_at: new Date().toISOString(),
-      status: 'Pending VS'
+      status: 'in_observation'
     })
     .eq('id', id)
 
@@ -633,7 +633,15 @@ const filteredCases = sortedCases.filter((item) => {
 </td>
 
 <td className="p-5 border border-gray-200">
-  <ObservationStatus status={item.status} />
+  <ObservationStatus
+    status={
+      !item.acknowledged_at
+        ? 'pending_ack'
+        : !item.vs_taken_at
+          ? 'pending_vs'
+          : 'in_observation'
+    }
+  />
 </td>
 
 <td className="p-5 border border-gray-200 relative">
@@ -1451,11 +1459,11 @@ function ObservationStatus({ status }) {
     text = 'Pending Acknowledgement'
   }
 
-  if (status === 'pending_vs') {
-    bg = '#FEF3C7'
-    color = '#D97706'
-    text = 'Pending VS'
-  }
+if (status === 'pending_vs') {
+  bg = '#FFEDD5'
+  color = '#EA580C'
+  text = 'Pending VS'
+}
 
   if (status === 'overdue_vs') {
     bg = '#FEE2E2'
