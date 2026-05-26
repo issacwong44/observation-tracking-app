@@ -48,16 +48,17 @@ const filteredHistoryCases = historyCases.filter((item) => {
           ← Back to Dashboard
         </Link>
         
-        <div className="relative flex items-center mb-6"></div>
-        <input
+        <div className="mt-6 mb-10">
+  <input
     type="text"
     placeholder="Search Bed / Handover / Remarks"
     value={searchTerm}
     onChange={(e) => setSearchTerm(e.target.value)}
     className="border border-gray-300 rounded-2xl px-4 py-3 w-[320px] shadow-sm outline-none focus:ring-2 focus:ring-[#0078AE]"
   />
+</div>
 
-       <div className="bg-white rounded-3xl p-6 shadow">
+<div className="bg-white rounded-3xl p-6 shadow">
         <div className="rounded-3xl overflow-x-auto border border-gray-200">
  <table className="min-w-[1000px] w-full border-separate border-spacing-0">
             <thead>
@@ -108,23 +109,30 @@ const filteredHistoryCases = historyCases.filter((item) => {
       </div>
       <div className="fixed bottom-4 left-0 w-full px-4 z-50">
 
-  <div className="grid grid-cols-2 gap-3">
+  <div className="grid grid-cols-3 gap-3">
 
-   <Link
-  href="/dashboard"
-  className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white text-gray-500 border"
->
-  HOME
-</Link>
+  <Link
+    href="/dashboard"
+    className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white text-gray-500 hover:bg-gray-300 border"
+  >
+    HOME
+      </Link>
 
-<Link
-  href="/history"
-  className="py-4 text-center font-bold rounded-3xl shadow-xl bg-[#0078AE] hover:bg-[#00638F] text-white"
->
-  HISTORY
-</Link>
+  <Link
+    href="/handover"
+    className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white text-gray-500 hover:bg-gray-300 border"
+  >
+    HANDOVER
+  </Link>
 
-  </div>
+  <Link
+    href="/history"
+    className="py-4 text-center font-bold rounded-3xl shadow-xl bg-[#0078AE] hover:bg-[#00638F] text-white"
+  >
+    HISTORY
+  </Link>
+
+</div>
 
 </div>
     </div>

@@ -40,16 +40,17 @@ useEffect(() => {
 async function handleSubmit(e) {
   e.preventDefault()
 
-  const { data: existingCase } = await supabase
-    .from('observation_cases')
-    .select('*')
-    .eq('bed_no', bed)
-    .is('confirmed_dc_at', null)
+ const { data: existingBed } = await supabase
+  .from('observation_cases')
+  .select('*')
+  .eq('bed_no', bed)
+  .is('confirmed_dc_at', null)
+  .maybeSingle()
 
-  if (existingCase.length > 0) {
-    setWarningModal(existingCase[0])
-    return
-  }
+if (existingBed) {
+  setWarningModal(existingBed)
+  return
+}
   const { error } = await supabase
     .from('observation_cases')
     .insert([
@@ -302,7 +303,7 @@ async function handleSubmit(e) {
   <label className="block font-bold mb-2">Nursing Handover</label>
 
   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-    {['CTB', 'Urine', 'Hstix', 'IVF', 'Cardiac Mon', 'Restraint', 'Tracking tag', 'Others'].map((item) => (
+    {['CTB', 'Urine', 'Hstix', 'IVF', 'AOM','Cardiac Mon', 'Restraint', 'Tracking tag', 'Others'].map((item) => (
   <button
     key={item}
     type="button"

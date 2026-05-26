@@ -27,6 +27,10 @@ const [viewMode, setViewMode] = useState('table')
 const [detailModal, setDetailModal] = useState(null)
 const [handoverChecks, setHandoverChecks] = useState({})
 const [q1hModal, setQ1hModal] = useState(false)
+const [dropQ1hModal, setDropQ1hModal] = useState(false)
+const [changeBedModal, setChangeBedModal] = useState(null)
+const [newBedNo, setNewBedNo] = useState('')
+const [changeBedError, setChangeBedError] = useState('')
 
  useEffect(() => {
   fetchCases()
@@ -154,6 +158,41 @@ async function handleDischarge(item) {
   if (!error) fetchCases()
 }
 
+async function handleChangeBed() {
+  if (!changeBedModal || !newBedNo.trim()) return
+
+  // check duplicated bed
+  const { data: existingBed } = await supabase
+    .from('observation_cases')
+    .select('id')
+    .eq('bed_no', newBedNo.trim())
+    .neq('id', changeBedModal.id)
+    .maybeSingle()
+
+  // if duplicated
+if (existingBed) {
+  setChangeBedError(`Bed ${newBedNo.trim()} already occupied`)
+  return
+}
+
+  // update bed
+  const { error } = await supabase
+    .from('observation_cases')
+    .update({
+      bed_no: newBedNo.trim(),
+      changed_bed_at: new Date().toISOString()
+    })
+    .eq('id', changeBedModal.id)
+
+  if (!error) {
+  setChangeBedError('')
+  setChangeBedModal(null)
+  setNewBedNo('')
+  setDetailModal(null)
+  await fetchCases()
+}
+}
+
 async function addQ1H(id) {
   const { error } = await supabase
     .from('observation_cases')
@@ -164,6 +203,19 @@ async function addQ1H(id) {
 
   if (!error) {
     setQ1hModal(false)
+    fetchCases()
+  }
+}
+async function dropQ1H(id) {
+  const { error } = await supabase
+    .from('observation_cases')
+    .update({
+      q1h_monitoring: false
+    })
+    .eq('id', id)
+
+  if (!error) {
+    setDropQ1hModal(false)
     fetchCases()
   }
 }
@@ -438,12 +490,21 @@ const filteredCases = sortedCases.filter((item) => {
   color="#245C8F"
   onViewAll={openCaseModal}
   extraButton={
-    <button
-      onClick={() => setQ1hModal(true)}
-      className="mt-3 px-4 py-2 rounded-xl bg-[#DBEAFE] text-[#245C8F] font-bold"
-    >
-      Add
-    </button>
+    <div className="mt-3 flex gap-2">
+
+  <button
+    onClick={() => setQ1hModal(true)}
+    className="px-4 py-2 rounded-xl bg-[#DBEAFE] text-[#245C8F] font-bold"
+  >
+    Add
+  </button>
+  <button
+    onClick={() => setDropQ1hModal(true)}
+    className="px-4 py-2 rounded-xl bg-[#DBEAFE] text-[#245C8F] font-bold"
+  >
+    Drop
+  </button>
+</div>
   }
 />
 </div>
@@ -914,6 +975,83 @@ const filteredCases = sortedCases.filter((item) => {
   </div>
 )}
     </div>
+
+    {changeBedModal && (
+  <div
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60]"
+   onClick={() => {
+  setChangeBedModal(null)
+  setNewBedNo('')
+  setChangeBedError('')
+}}
+  >
+    <div
+      className="bg-white rounded-3xl p-8 w-[90vw] max-w-[420px] shadow-2xl"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-[#0078AE]">
+          Change Bed
+        </h2>
+
+         <button
+    onClick={() => {
+      setChangeBedModal(null)
+      setNewBedNo('')
+      setChangeBedError('')
+    }}
+    className="text-3xl font-bold text-gray-400"
+  >
+    ✕
+  </button>
+</div>
+
+      <p className="text-gray-500 mb-3">
+        Current Bed
+      </p>
+
+      <div className="bg-gray-100 rounded-2xl p-4 font-bold text-xl mb-6">
+        Bed {changeBedModal.bed_no}
+      </div>
+
+      <p className="text-gray-500 mb-3">
+        New Bed Number
+      </p>
+
+     <input
+  value={newBedNo}
+  onChange={(e) => {
+    setNewBedNo(e.target.value)
+    setChangeBedError('')
+  }}
+  placeholder="Enter New Bed Number"
+  className={`w-full rounded-2xl px-4 py-4 text-xl mb-2 border ${
+    changeBedError
+      ? 'border-red-400'
+      : 'border-gray-300'
+  }`}
+/>
+
+{changeBedError && (
+  <div className="mb-4 bg-red-50 border border-red-200 text-red-600 rounded-2xl px-4 py-3 font-semibold">
+    {changeBedError}
+  </div>
+)}
+
+      <button
+        onClick={handleChangeBed}
+        disabled={!newBedNo.trim()}
+        className={`w-full py-4 rounded-2xl text-xl font-bold text-white ${
+          newBedNo.trim()
+            ? 'bg-[#0078AE] hover:bg-[#00638F]'
+            : 'bg-gray-300 cursor-not-allowed'
+        }`}
+      >
+        Confirm Change Bed
+      </button>
+    </div>
+  </div>
+)}
     {detailModal && (
 <div
   className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
@@ -1013,6 +1151,17 @@ const filteredCases = sortedCases.filter((item) => {
 >
   Save Checklist
 </button>
+
+<button
+  onClick={() => {
+    setChangeBedModal(detailModal)
+    setNewBedNo('')
+  }}
+  className="w-full mt-3 bg-gray-200 text-gray-700 py-3 rounded-2xl font-bold hover:bg-gray-300"
+>
+  Change Bed
+</button>
+
           </div>
         </div>
 
@@ -1050,6 +1199,44 @@ const filteredCases = sortedCases.filter((item) => {
               key={item.id}
               onClick={() => addQ1H(item.id)}
               className="bg-gray-100 hover:bg-[#DBEAFE] text-[#245C8F] rounded-2xl py-4 font-bold text-xl"
+            >
+              {item.bed_no}
+            </button>
+          ))}
+      </div>
+    </div>
+  </div>
+)}
+{dropQ1hModal && (
+  <div
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    onClick={() => setDropQ1hModal(false)}
+  >
+    <div
+      className="bg-white rounded-3xl p-8 w-[520px] shadow-2xl"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-red-600">
+          Drop Q1H Monitoring
+        </h2>
+
+        <button
+          onClick={() => setDropQ1hModal(false)}
+          className="text-3xl font-bold text-gray-400"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="grid grid-cols-4 gap-3">
+        {activeCases
+          .filter((item) => item.q1h_monitoring)
+          .map((item) => (
+            <button
+              key={item.id}
+              onClick={() => dropQ1H(item.id)}
+              className="bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl py-4 font-bold text-xl"
             >
               {item.bed_no}
             </button>
@@ -1177,9 +1364,8 @@ function SmallCard({ title, list, icon, color, onViewAll, extraButton }) {
 
 
         ))}
-      <div className="fixed bottom-0 left-0 w-full px-4 pb-[env(safe-area-inset-bottom)] z-50">
-
-  <div className="grid grid-cols-2 gap-3">
+      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] left-0 w-full px-4 z-50 pointer-events-none">
+  <div className="grid grid-cols-3 gap-3 pointer-events-auto">
 
     <Link
       href="/dashboard"
@@ -1189,14 +1375,20 @@ function SmallCard({ title, list, icon, color, onViewAll, extraButton }) {
     </Link>
 
     <Link
+      href="/handover"
+      className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white text-gray-500 hover:bg-gray-300 border"
+    >
+      HANDOVER
+    </Link>
+
+    <Link
       href="/history"
-      className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white text-gray-500 border"
+      className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white text-gray-500 hover:bg-gray-300 border"
     >
       HISTORY
     </Link>
 
   </div>
-
 </div>
       </div>
 
