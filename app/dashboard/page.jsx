@@ -32,6 +32,8 @@ const [changeBedModal, setChangeBedModal] = useState(null)
 const [newBedNo, setNewBedNo] = useState('')
 const [changeBedError, setChangeBedError] = useState('')
 
+
+
  useEffect(() => {
   fetchCases()
 
@@ -145,17 +147,43 @@ async function handleVS(id) {
 }
 
 async function handleDischarge(item) {
+  const now = new Date().toISOString()
 
   const { error } = await supabase
     .from('observation_cases')
     .update({
-      discharged_at: new Date().toISOString(),
-      confirmed_dc_at: new Date().toISOString(),
+      discharged_at: now,
+      confirmed_dc_at: now,
       status: 'discharged'
     })
     .eq('id', item.id)
 
-  if (!error) fetchCases()
+  if (error) {
+    console.log(error)
+    alert('Error discharging case')
+    return
+  }
+
+  // Hide psychiatric handover case linked by observation_case_id
+  await supabase
+    .from('psy_handover_cases')
+    .update({
+      handover_hidden: true,
+      updated_at: now
+    })
+    .eq('observation_case_id', item.id)
+
+  // Backup: hide old/backfilled psychiatric case linked by bed_no
+  await supabase
+    .from('psy_handover_cases')
+    .update({
+      handover_hidden: true,
+      updated_at: now
+    })
+    .eq('bed_no', item.bed_no)
+    .not('bed_no', 'is', null)
+
+  fetchCases()
 }
 
 async function handleChangeBed() {
@@ -719,17 +747,33 @@ const filteredCases = sortedCases.filter((item) => {
 
       return (
         <div
-          key={index}
-          className="flex items-center gap-1 bg-[#F3EBCF] text-[#9A6E00] px-4 py-2 rounded-2xl font-bold"
-        >
-          <span>{text}</span>
+  key={index}
+  className={`flex items-center gap-1 px-4 py-2 rounded-2xl font-bold ${
+    done
+      ? 'bg-green-100 text-green-700'
+      : 'bg-[#F3EBCF] text-[#9A6E00]'
+  }`}
+>
+  <span>{text}</span>
 
-          {done && (
-            <span className="text-green-600">
-              ✓
-            </span>
-          )}
-        </div>
+  {done && (
+    <span className="text-green-600">
+      ✓
+    </span>
+  )}
+
+  {text === 'CTB' && done && !item.handover_done?.CTB_report_reviewed && (
+    <span className="ml-1 bg-orange-100 text-orange-700 px-2 py-0.5 rounded-xl text-xs font-bold">
+      Await report
+    </span>
+  )}
+
+  {text === 'CTB' && item.handover_done?.CTB_report_reviewed && (
+    <span className="ml-1 bg-blue-100 text-[#0078AE] px-2 py-0.5 rounded-xl text-xs font-bold">
+      Report reviewed
+    </span>
+  )}
+</div>
       )
     })}
 </div>
@@ -1088,69 +1132,110 @@ const filteredCases = sortedCases.filter((item) => {
         </div>
 
         <div className="flex justify-between">
-          <span className="text-gray-500">Category</span>
-          <span className="font-bold">
-            Cat {detailModal.category}
-          </span>
-        </div>
+  <span className="text-gray-500">Category</span>
+  <span className="font-bold">
+    Cat {detailModal.category}
+  </span>
+</div>
 
-        <div className="flex justify-between">
-          <span className="text-gray-500">Remarks</span>
-          <span className="font-bold">
-            {detailModal.remarks || '-'}
-          </span>
-        </div>
+<div className="flex justify-between items-center gap-4">
+  <div className="flex items-center gap-2 text-gray-500">
+    <span>Dx</span>
+    <span className="text-[#0078AE] text-xs">▲</span>
+  </div>
 
-        <div>
-          <p className="text-gray-500 mb-3 font-semibold">
-            Handover Checklist
-          </p>
+  <span className="font-bold text-right">
+    {detailModal.diagnosis || '-'}
+  </span>
+</div>
 
-          <div className="space-y-3">
+<div className="flex justify-between">
+  <span className="text-gray-500">Remarks</span>
+  <span className="font-bold text-right">
+    {detailModal.remarks || '-'}
+  </span>
+</div>
 
-            {detailModal.nursing_handover
-  ?.split(',')
-  .map((item, index) => {
-    const text = item.trim()
+        {detailModal.nursing_handover &&
+ detailModal.nursing_handover.trim() !== '' && (
+  <div>
+    <p className="text-gray-500 mb-3 font-semibold">
+      Handover Checklist
+    </p>
 
-    return (
-      <label
-        key={index}
-        className="flex items-center gap-3"
+    <div className="space-y-3">
+      {detailModal.nursing_handover
+        .split(',')
+        .map((item, index) => {
+          const text = item.trim()
+          const isCTB = text === 'CTB'
+
+          if (!text) return null
+
+          return (
+            <div key={index} className="space-y-2">
+              <label className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  checked={handoverChecks[text] || false}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+
+                    setHandoverChecks((prev) => ({
+                      ...prev,
+                      [text]: checked,
+
+                      ...(isCTB && !checked
+                        ? { CTB_report_reviewed: false }
+                        : {})
+                    }))
+                  }}
+                />
+
+                <span>{text}</span>
+              </label>
+
+              {isCTB && handoverChecks.CTB && (
+                <label className="ml-8 flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={handoverChecks.CTB_report_reviewed || false}
+                    onChange={(e) => {
+                      setHandoverChecks((prev) => ({
+                        ...prev,
+                        CTB_report_reviewed: e.target.checked
+                      }))
+                    }}
+                  />
+
+                  <span className="font-semibold text-gray-700">
+                    Report reviewed
+                  </span>
+                </label>
+              )}
+            </div>
+          )
+        })}
+
+      <button
+        onClick={async () => {
+          await supabase
+            .from('observation_cases')
+            .update({
+              handover_done: handoverChecks
+            })
+            .eq('id', detailModal.id)
+
+          setDetailModal(null)
+          fetchCases()
+        }}
+        className="w-full mt-6 bg-[#0078AE] text-white py-3 rounded-2xl font-bold hover:bg-[#00638F]"
       >
-        <input
-  type="checkbox"
-  checked={handoverChecks[text] || false}
-  onChange={(e) => {
-    setHandoverChecks({
-      ...handoverChecks,
-      [text]: e.target.checked
-    })
-  }}
-/>
-        <span>{text}</span>
-      </label>
-      
-    )
-    
-  })}
-<button
-  onClick={async () => {
-    await supabase
-      .from('observation_cases')
-      .update({
-        handover_done: handoverChecks
-      })
-      .eq('id', detailModal.id)
-
-    setDetailModal(null)
-
-    fetchCases()
-  }}
-  className="w-full mt-6 bg-[#0078AE] text-white py-3 rounded-2xl font-bold hover:bg-[#00638F]"
->
-  Save Checklist
-</button>
+        Save Checklist
+      </button>
+    </div>
+  </div>
+)}
 
 <button
   onClick={() => {
@@ -1166,8 +1251,6 @@ const filteredCases = sortedCases.filter((item) => {
         </div>
 
       </div>
-    </div>
-  </div>
 )}
 {q1hModal && (
   <div
@@ -1468,20 +1551,43 @@ function BedCaseCard({
           <div className="text-gray-500 mb-1">Handover</div>
 
           <div className="flex flex-wrap gap-2">
-            {item.nursing_handover
-              ?.split(',')
-              .map((tag, index) => (
-                <span
-  key={index}
-  className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded-xl text-xs font-semibold flex items-center gap-1"
->
-  {tag}
+           {item.nursing_handover
+  ?.split(',')
+  .map((tag, index) => {
+    const text = tag.trim()
+    const done = item.handover_done?.[text]
 
-  {item.handover_done?.[tag.trim()] && (
-    <span className="text-green-600 text-[10px]">✔</span>
-  )}
-</span>
-              ))}
+    return (
+      <span
+        key={index}
+        className={`px-2 py-1 rounded-xl text-xs font-semibold flex items-center gap-1 ${
+          done
+            ? 'bg-green-100 text-green-700'
+            : 'bg-yellow-100 text-yellow-700'
+        }`}
+      >
+        {text}
+
+        {done && (
+          <span className="text-green-600 text-[10px]">
+            ✔
+          </span>
+        )}
+
+        {text === 'CTB' && done && !item.handover_done?.CTB_report_reviewed && (
+          <span className="ml-1 bg-orange-100 text-orange-700 px-2 py-0.5 rounded-xl text-[10px] font-bold">
+            Await report
+          </span>
+        )}
+
+        {text === 'CTB' && item.handover_done?.CTB_report_reviewed && (
+          <span className="ml-1 bg-blue-100 text-[#0078AE] px-2 py-0.5 rounded-xl text-[10px] font-bold">
+            Report reviewed
+          </span>
+        )}
+      </span>
+    )
+  })}
           </div>
           <div className="flex gap-2 mt-5">
   <button

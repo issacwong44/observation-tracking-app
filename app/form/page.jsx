@@ -21,6 +21,24 @@ const [q1h, setQ1h] = useState('No')
 const [handover, setHandover] = useState([])
 const [remarks, setRemarks] = useState('')
 const [warningModal, setWarningModal] = useState(null)
+const [diagnosis, setDiagnosis] = useState('')
+
+const diagnosisOptions = [
+  'Chest pain',
+  'Abdominal pain',
+  'Dizziness',
+  'Head injury',
+  'Fall',
+  'SOB',
+  'Fever',
+  'GE',
+  'Hyperglycemia',
+  'Hypoglycemia',
+  'Unstable Emotion',
+  'Self harm',
+  'Drug overdose',
+  'Others'
+]
 
 const router = useRouter()
 
@@ -40,18 +58,19 @@ useEffect(() => {
 async function handleSubmit(e) {
   e.preventDefault()
 
- const { data: existingBed } = await supabase
-  .from('observation_cases')
-  .select('*')
-  .eq('bed_no', bed)
-  .is('confirmed_dc_at', null)
-  .maybeSingle()
+  const { data: existingBed } = await supabase
+    .from('observation_cases')
+    .select('*')
+    .eq('bed_no', bed)
+    .is('confirmed_dc_at', null)
+    .maybeSingle()
 
-if (existingBed) {
-  setWarningModal(existingBed)
-  return
-}
-  const { error } = await supabase
+  if (existingBed) {
+    setWarningModal(existingBed)
+    return
+  }
+
+  const { data: newCase, error } = await supabase
     .from('observation_cases')
     .insert([
       {
@@ -60,6 +79,7 @@ if (existingBed) {
         gender: gender,
         age: age,
         category: category,
+        diagnosis: diagnosis,
 
         fall_risk: fallRisk,
         missing_risk: psySpMissing.join(', '),
@@ -74,24 +94,65 @@ if (existingBed) {
         status: 'pending_ack'
       }
     ])
+    .select()
+    .single()
 
   if (error) {
     console.log(error)
     alert('Error saving data')
-  } else {
-    alert('Case submitted')
-
-    setGender('')
-    setAge('')
-    setCategory('')
-    setFallRisk('No')
-    setPsySpMissing([])
-    setHeadInjury('No')
-    setQ1h('No')
-    setHandover([])
-    setRemarks('')
+    return
   }
+
+  if (newCase && psySpMissing.length > 0) {
+    alert(`Creating psychiatric case: ${psySpMissing.join(', ')}`)
+    const { error: psyError } = await supabase
+      .from('psy_handover_cases')
+      .insert([
+        {
+          observation_case_id: newCase.id,
+
+          bed_no: bed,
+          patient_label: `Bed ${bed}`,
+
+          gender: gender,
+          age: age,
+          diagnosis: diagnosis,
+
+          location: `Bed ${bed}`,
+risk_type: psySpMissing.join(', '),
+
+         status: 'Pending Doctor Consultation',
+
+          progress: '',
+          outcome: '',
+          miscellaneous: remarks || '',
+          free_text: '',
+
+          source: 'observation_form',
+          handover_hidden: false
+        }
+      ])
+
+    if (psyError) {
+      console.log(psyError)
+      alert('Observation case submitted, but psychiatric handover was not created')
+      return
+    }
+  }
+
+  alert('Case submitted')
+
+  setGender('')
+  setAge('')
+  setCategory('')
+  setFallRisk('No')
+  setPsySpMissing([])
+  setHeadInjury('No')
+  setQ1h('No')
+  setHandover([])
+  setRemarks('')
 }
+
 
   return (
 <div className="min-h-screen bg-[#f4f6f8] pb-40 px-4 py-4 md:px-8">
@@ -165,6 +226,10 @@ if (existingBed) {
           />
         </div>
 
+ <label className="block font-bold mb-2">
+    Category
+  </label>
+
 <div className="grid grid-cols-5 gap-2 md:gap-3">
 
   {['1', '2', '3', '4', '5'].map((cat) => {
@@ -201,6 +266,25 @@ if (existingBed) {
 
 </div>
 
+<div>
+  <label className="block font-bold mb-2">
+    Diagnosis
+  </label>
+
+  <select
+    value={diagnosis}
+    onChange={(e) => setDiagnosis(e.target.value)}
+    className="w-full border p-3 rounded-xl bg-white"
+  >
+    <option value="">Select diagnosis</option>
+
+    {diagnosisOptions.map((item) => (
+      <option key={item} value={item}>
+        {item}
+      </option>
+    ))}
+  </select>
+</div>
 
         <div>
           <label className="block font-bold mb-2">PSY / SP / Missing</label>
@@ -352,64 +436,57 @@ if (existingBed) {
 
       </form>
     </div>
-    {warningModal && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+       {warningModal && (
+      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div className="bg-white rounded-3xl p-8 w-[520px] shadow-2xl">
+          <div className="bg-[#0078AE] text-white rounded-2xl p-5 mb-6">
+            <h2 className="text-3xl font-bold">
+              Duplicate Active Bed
+            </h2>
 
-    <div className="bg-white rounded-3xl p-8 w-[520px] shadow-2xl">
+            <p className="text-white/80 mt-1">
+              Bed {warningModal.bed_no} already exists
+            </p>
+          </div>
 
-      <div className="bg-[#0078AE] text-white rounded-2xl p-5 mb-6">
-        <h2 className="text-3xl font-bold">
-          Duplicate Active Bed
-        </h2>
+          <div className="space-y-4">
+            <div className="bg-gray-100 rounded-2xl p-4">
+              <p className="text-gray-500">Category</p>
+              <p className="font-bold text-xl">
+                Cat {warningModal.category}
+              </p>
+            </div>
 
-        <p className="text-white/80 mt-1">
-          Bed {warningModal.bed_no} already exists
-        </p>
-      </div>
+            <div className="bg-gray-100 rounded-2xl p-4">
+              <p className="text-gray-500">Handover</p>
+              <p className="font-bold text-xl">
+                {warningModal.nursing_handover || '-'}
+              </p>
+            </div>
 
-      <div className="space-y-4">
+            <div className="bg-gray-100 rounded-2xl p-4">
+              <p className="text-gray-500">Remarks</p>
+              <p className="font-bold">
+                {warningModal.remarks || '-'}
+              </p>
+            </div>
+          </div>
 
-        <div className="bg-gray-100 rounded-2xl p-4">
-          <p className="text-gray-500">Category</p>
-          <p className="font-bold text-xl">
-            Cat {warningModal.category}
-          </p>
+          <div className="flex justify-end mt-8">
+            <button
+              onClick={() => setWarningModal(null)}
+              className="px-6 py-3 rounded-2xl bg-gray-200 font-bold"
+            >
+              Close
+            </button>
+          </div>
         </div>
-
-        <div className="bg-gray-100 rounded-2xl p-4">
-          <p className="text-gray-500">Handover</p>
-          <p className="font-bold text-xl">
-            {warningModal.nursing_handover || '-'}
-          </p>
-        </div>
-
-        <div className="bg-gray-100 rounded-2xl p-4">
-          <p className="text-gray-500">Remarks</p>
-          <p className="font-bold">
-            {warningModal.remarks || '-'}
-          </p>
-        </div>
-
       </div>
-
-      <div className="flex justify-end mt-8">
-
-        <button
-          onClick={() => setWarningModal(null)}
-          className="px-6 py-3 rounded-2xl bg-gray-200 font-bold"
-        >
-          Close
-        </button>
-
-      </div>
-
-    </div>
-
-  </div>
-)}
+    )}
   </div>
   )
 }
+
 export default function FormPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
