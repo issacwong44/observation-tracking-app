@@ -63,17 +63,6 @@ export default function FormHomePage() {
       return 'Bed number must contain numbers only'
     }
 
-    const numericBed = Number(trimmedValue)
-
-    const isStayOvernightBed =
-      numericBed >= 1 && numericBed <= 10
-
-    const isObservationBed =
-      numericBed >= 101 && numericBed <= 179
-
-    if (!isStayOvernightBed && !isObservationBed) {
-      return 'Please enter Bed 1–10 or Bed 101–179'
-    }
 
     const isOccupied = activeCases.some(
       (item) =>
