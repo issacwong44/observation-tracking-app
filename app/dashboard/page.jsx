@@ -146,6 +146,20 @@ async function handleVS(id) {
   if (!error) fetchCases()
 }
 
+function getDischargeWarnings(item) {
+  const warnings = []
+
+  if (!item.acknowledged_at) {
+    warnings.push('Patient has not been acknowledged')
+  }
+
+  if (!item.vs_taken_at) {
+    warnings.push('Vital signs have not been taken')
+  }
+
+  return warnings
+}
+
 async function handleDischarge(item) {
   const now = new Date().toISOString()
 
@@ -189,36 +203,91 @@ async function handleDischarge(item) {
 async function handleChangeBed() {
   if (!changeBedModal || !newBedNo.trim()) return
 
-  // check duplicated bed
-  const { data: existingBed } = await supabase
+  const oldBedNo = String(changeBedModal.bed_no)
+  const newBed = newBedNo.trim()
+  const changedAt = new Date().toISOString()
+
+  // Check duplicated bed
+  const { data: existingBed, error: checkError } = await supabase
     .from('observation_cases')
     .select('id')
-    .eq('bed_no', newBedNo.trim())
+    .eq('bed_no', newBed)
     .neq('id', changeBedModal.id)
+    .is('confirmed_dc_at', null)
     .maybeSingle()
 
-  // if duplicated
-if (existingBed) {
-  setChangeBedError(`Bed ${newBedNo.trim()} already occupied`)
-  return
-}
+  if (checkError) {
+    console.error('Check bed error:', checkError)
+    setChangeBedError('Unable to check bed availability')
+    return
+  }
 
-  // update bed
-  const { error } = await supabase
+  if (existingBed) {
+    setChangeBedError(`Bed ${newBed} already occupied`)
+    return
+  }
+
+  // 1. Update Observation Room case
+  const { error: observationError } = await supabase
     .from('observation_cases')
     .update({
-      bed_no: newBedNo.trim(),
-      changed_bed_at: new Date().toISOString()
+      bed_no: newBed,
+      changed_bed_at: changedAt
     })
     .eq('id', changeBedModal.id)
 
-  if (!error) {
+  if (observationError) {
+    console.error('Change bed error:', observationError)
+    setChangeBedError('Failed to change bed')
+    return
+  }
+
+  // 2. Update linked psychiatric case by observation_case_id
+  const { error: linkedPsyError } = await supabase
+    .from('psy_handover_cases')
+    .update({
+      bed_no: newBed,
+      updated_at: changedAt
+    })
+    .eq('observation_case_id', changeBedModal.id)
+
+  if (linkedPsyError) {
+    console.error(
+      'Update linked psychiatric bed error:',
+      linkedPsyError
+    )
+    setChangeBedError(
+      'Bed changed, but psychiatric handover update failed'
+    )
+    return
+  }
+
+  // 3. Backup for old psychiatric records
+  // that do not have observation_case_id
+  const { error: backupPsyError } = await supabase
+    .from('psy_handover_cases')
+    .update({
+      bed_no: newBed,
+      observation_case_id: changeBedModal.id,
+      updated_at: changedAt
+    })
+    .eq('bed_no', oldBedNo)
+    .is('observation_case_id', null)
+    .eq('handover_hidden', false)
+
+  if (backupPsyError) {
+    console.error(
+      'Backup psychiatric bed update error:',
+      backupPsyError
+    )
+  }
+
   setChangeBedError('')
   setChangeBedModal(null)
   setNewBedNo('')
   setDetailModal(null)
+
   await fetchCases()
-}
 }
 
 async function addQ1H(id) {
@@ -844,18 +913,17 @@ const filteredCases = sortedCases.filter((item) => {
 >
   VS
 </button>
-   <button
-  disabled={!item.acknowledged_at || !item.vs_taken_at}
-  onClick={() => setActionModal({ type: 'dc', item })}
-  className={`px-4 py-2 rounded-2xl font-bold ${
-    item.acknowledged_at && item.vs_taken_at
-      ? 'bg-[#FEE2E2] text-[#B91C1C]'
-      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-  }`}
+  <button
+  type="button"
   onClick={(e) => {
-  e.stopPropagation()
-  setActionModal({ type: 'dc', item })
-}}
+    e.stopPropagation()
+    setActionModal({ type: 'dc', item })
+  }}
+  className={`px-4 py-2 rounded-2xl font-bold transition ${
+    item.acknowledged_at && item.vs_taken_at
+      ? 'bg-red-100 text-red-700 hover:bg-red-200'
+      : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+  }`}
 >
   D/C
 </button>
@@ -958,6 +1026,33 @@ const filteredCases = sortedCases.filter((item) => {
   </p>
 </div>
 
+{actionModal.type === 'dc' &&
+  getDischargeWarnings(actionModal.item).length > 0 && (
+    <div className="mb-6 bg-red-50 border-2 border-red-300 rounded-2xl p-5">
+      <p className="text-red-700 text-lg font-bold mb-3">
+        Incomplete nursing actions
+      </p>
+
+      <div className="space-y-2">
+        {getDischargeWarnings(actionModal.item).map(
+          (warning, index) => (
+            <div
+              key={index}
+              className="flex items-start gap-2 text-red-700 font-semibold"
+            >
+              <span>⚠</span>
+              <span>{warning}</span>
+            </div>
+          )
+        )}
+      </div>
+
+      <p className="text-red-600 text-sm font-semibold mt-4">
+        Confirm to force discharge this case?
+      </p>
+    </div>
+  )}
+
       <div className="space-y-3 mb-6">
 
         <div className="bg-gray-100 rounded-2xl p-4">
@@ -1002,13 +1097,22 @@ const filteredCases = sortedCases.filter((item) => {
         </button>
 
         <button
+  type="button"
   onClick={confirmAction}
-  className="px-5 py-3 rounded-2xl bg-[#0078AE] hover:bg-[#00638F] text-white font-bold"
+  className={`px-5 py-3 rounded-2xl text-white font-bold ${
+    actionModal.type === 'dc'
+      ? getDischargeWarnings(actionModal.item).length > 0
+        ? 'bg-red-600 hover:bg-red-700'
+        : 'bg-[#0078AE] hover:bg-[#00638F]'
+      : 'bg-[#0078AE] hover:bg-[#00638F]'
+  }`}
 >
   {actionModal.type === 'ack'
     ? 'Confirm Acknowledgement'
     : actionModal.type === 'vs'
     ? 'Confirm VS'
+    : getDischargeWarnings(actionModal.item).length > 0
+    ? 'Force D/C'
     : 'Confirm D/C'}
 </button>
 
@@ -1619,18 +1723,19 @@ function BedCaseCard({
   </button>
 
   <button
-     onClick={(e) => {
+  type="button"
+  onClick={(e) => {
     e.stopPropagation()
     setActionModal({ type: 'dc', item })
   }}
-    className={`px-4 py-2 rounded-xl font-bold text-sm ${
-      !item.vs_taken_at
-        ? 'bg-gray-200 text-gray-400'
-        : 'bg-red-100 text-red-700 hover:bg-red-200'
-    }`}
-  >
-    D/C
-  </button>
+  className={`px-4 py-2 rounded-xl font-bold text-sm transition ${
+    item.acknowledged_at && item.vs_taken_at
+      ? 'bg-red-100 text-red-700 hover:bg-red-200'
+      : 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+  }`}
+>
+  D/C
+</button>
 </div>
         </div>
       </div>

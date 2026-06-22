@@ -1,0 +1,23 @@
+{
+  "id": "/psy",
+  "name": "Psychiatric Handover",
+  "short_name": "Psych Handover",
+  "description": "Psychiatric Case Handover",
+  "start_url": "/psy",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F5F5F7",
+  "theme_color": "#0078AE",
+  "icons": [
+    {
+      "src": "/psy-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/psy-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

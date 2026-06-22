@@ -70,32 +70,42 @@ async function handleSubmit(e) {
     return
   }
 
-  const { data: newCase, error } = await supabase
-    .from('observation_cases')
-    .insert([
-      {
-        bed_no: bed,
+  const hasNursingHandover = handover.length > 0
 
-        gender: gender,
-        age: age,
-        category: category,
-        diagnosis: diagnosis,
+const { data: newCase, error } = await supabase
+  .from('observation_cases')
+  .insert([
+    {
+      bed_no: bed,
 
-        fall_risk: fallRisk,
-        missing_risk: psySpMissing.join(', '),
+      gender: gender,
+      age: age,
+      category: category,
+      diagnosis: diagnosis,
 
-        head_injury: headInjury,
-        q1h_monitoring: q1h,
+      fall_risk: fallRisk,
+      missing_risk: psySpMissing.join(', '),
 
-        nursing_handover: handover.join(', '),
+      head_injury: headInjury,
+      q1h_monitoring: q1h,
 
-        remarks: remarks,
+      nursing_handover: handover.join(', '),
 
-        status: 'pending_ack'
-      }
-    ])
-    .select()
-    .single()
+      remarks: remarks,
+
+      status: 'pending_ack',
+
+      handover_seen: hasNursingHandover
+        ? false
+        : true,
+
+      handover_seen_at: hasNursingHandover
+        ? null
+        : new Date().toISOString()
+    }
+  ])
+  .select()
+  .single()
 
   if (error) {
     console.log(error)
