@@ -156,12 +156,8 @@ function extractPatientSurname(decodedText) {
     .trim()
     .toUpperCase()
 
-  // 支援：
-  // WB A1234567WONG, SIU MING
-  // WB AB1234569CHAN, TAI MAN
-  // WB A123456(A)LEE, MAY
   const match = value.match(
-    /^WB\s+[A-Z]{1,2}\d{6}\(?[0-9A]\)?([A-Z][A-Z' -]*),/
+    /^WB\s+[A-Z]{1,2}\d{6}\(?[0-9A]\)?[A-Z0-9]([A-Z][A-Z' -]*),/
   )
 
   if (!match) {
