@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import BottomNav from '../components/BottomNav'
 
 export default function FormHomePage() {
   const router = useRouter()
@@ -12,6 +13,14 @@ export default function FormHomePage() {
   const [errorMessage, setErrorMessage] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [isOpening, setIsOpening] = useState(false)
+
+  const [showScanner, setShowScanner] = useState(false)
+const [scanMessage, setScanMessage] = useState('')
+const [patientSurname, setPatientSurname] = useState('')
+const [wristbandScanned, setWristbandScanned] = useState(false)
+
+const scannerRef = useRef(null)
+const scannerContainerId = 'patient-wristband-reader'
 
   useEffect(() => {
     fetchActiveCases()
@@ -36,6 +45,18 @@ export default function FormHomePage() {
     }
   }, [])
 
+  useEffect(() => {
+  return () => {
+    if (scannerRef.current) {
+      scannerRef.current
+        .stop()
+        .catch(() => {})
+
+      scannerRef.current = null
+    }
+  }
+}, [])
+
   async function fetchActiveCases() {
     const { data, error } = await supabase
       .from('observation_cases')
@@ -51,6 +72,104 @@ export default function FormHomePage() {
 
     setIsLoading(false)
   }
+
+ function extractPatientSurname(decodedText) {
+  const value = decodedText.trim()
+
+  const match = value.match(
+    /^WB\s+\S+\s+([^,]+),/i
+  )
+
+  if (!match) {
+    return null
+  }
+
+  return match[1].trim().toUpperCase()
+}
+
+async function stopScanner() {
+  if (scannerRef.current) {
+    try {
+      const scannerState =
+        scannerRef.current.getState?.()
+
+      if (scannerState === 2 || scannerState === 3) {
+        await scannerRef.current.stop()
+      }
+
+      await scannerRef.current.clear()
+    } catch (error) {
+      console.error('Stop scanner error:', error)
+    }
+
+    scannerRef.current = null
+  }
+
+  setShowScanner(false)
+}
+
+async function startScanner() {
+  setErrorMessage('')
+  setScanMessage('')
+  setShowScanner(true)
+
+  try {
+    const { Html5Qrcode } = await import('html5-qrcode')
+
+    await new Promise((resolve) =>
+      setTimeout(resolve, 250)
+    )
+
+    const scanner = new Html5Qrcode(
+      scannerContainerId
+    )
+
+    scannerRef.current = scanner
+
+    await scanner.start(
+      {
+        facingMode: 'environment'
+      },
+      {
+        fps: 10,
+        qrbox: {
+          width: 260,
+          height: 180
+        },
+        aspectRatio: 1.4
+      },
+      async (decodedText) => {
+        const scannedSurname =
+  extractPatientSurname(decodedText)
+
+if (!scannedSurname) {
+  setScanMessage(
+    'Unable to recognise this patient wristband QR code.'
+  )
+  return
+}
+
+setPatientSurname(scannedSurname)
+setWristbandScanned(true)
+
+await stopScanner()
+
+        await stopScanner()
+      },
+      () => {
+        // 掃描期間未讀到QR，不需要顯示error
+      }
+    )
+  } catch (error) {
+    console.error('Start scanner error:', error)
+
+    setShowScanner(false)
+
+    setErrorMessage(
+      'Unable to open camera. Please allow camera access.'
+    )
+  }
+}
 
   function validateBedNumber(value) {
     const trimmedValue = value.trim()
@@ -77,24 +196,42 @@ export default function FormHomePage() {
   }
 
   function handleOpenForm() {
-    if (isOpening || isLoading) return
+  if (isOpening || isLoading) return
 
-    const selectedBed = bedNo.trim()
-    const validationError = validateBedNumber(selectedBed)
+  const selectedBed = bedNo.trim()
+  const selectedSurname =
+  patientSurname.trim().toUpperCase()
 
-    if (validationError) {
-      setErrorMessage(validationError)
-      return
-    }
+if (!selectedSurname) {
+  setErrorMessage(
+    'Please scan the patient wristband first'
+  )
+  return
+}
 
-    setErrorMessage('')
-    setIsOpening(true)
+  const validationError =
+    validateBedNumber(selectedBed)
 
-    router.push(`/form?bed=${encodeURIComponent(selectedBed)}`)
+  if (validationError) {
+    setErrorMessage(validationError)
+    return
   }
 
+  setErrorMessage('')
+  setIsOpening(true)
+
+  sessionStorage.setItem(
+  'observation_patient_surname',
+  selectedSurname
+)
+
+  router.push(
+    `/form?bed=${encodeURIComponent(selectedBed)}`
+  )
+}
+
   return (
-    <main className="min-h-[100dvh] bg-[#F4F6F8] px-4 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8">
+    <main className="min-h-[100dvh] bg-[#F4F6F8] px-4 pt-4 pb-28 sm:px-6 sm:pt-6 sm:pb-32 md:px-8 md:pt-8 md:pb-36">
       <div className="mx-auto flex min-h-[calc(100dvh-32px)] w-full max-w-[760px] flex-col md:min-h-[calc(100dvh-64px)]">
         {/* Header */}
         <header className="rounded-[24px] bg-[#0078AE] px-5 py-6 text-white shadow-lg sm:px-7 sm:py-7 md:rounded-[32px] md:px-9 md:py-9">
@@ -114,6 +251,49 @@ export default function FormHomePage() {
         {/* Main Card */}
         <section className="mt-4 flex flex-1 flex-col rounded-[24px] border border-gray-200 bg-white p-5 shadow-sm sm:mt-6 sm:p-7 md:rounded-[32px] md:p-9">
           <div className="flex-1">
+
+            <div className="mb-7">
+  <label className="block text-base font-bold text-gray-800 sm:text-lg md:text-xl">
+    Patient Wristband
+  </label>
+
+  {!wristbandScanned ? (
+    <button
+      type="button"
+      onClick={startScanner}
+      disabled={isOpening}
+      className="mt-3 w-full rounded-2xl border-2 border-[#0078AE] bg-white px-4 py-5 text-lg font-bold text-[#0078AE] transition hover:bg-blue-50 disabled:opacity-50"
+    >
+      Scan Patient Wristband QR
+    </button>
+  ) : (
+    <div className="mt-3 rounded-2xl border border-green-200 bg-green-50 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-green-700">
+            Wristband scanned
+          </p>
+
+          <p className="mt-2 text-xl font-bold text-gray-900">
+            {patientSurname}
+          </p>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Patient ID: {patientId}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={startScanner}
+          className="rounded-xl bg-white px-3 py-2 text-sm font-bold text-[#0078AE] shadow-sm"
+        >
+          Scan Again
+        </button>
+      </div>
+    </div>
+  )}
+</div>
             <label
               htmlFor="bed-number"
               className="block text-base font-bold text-gray-800 sm:text-lg md:text-xl"
@@ -166,9 +346,12 @@ export default function FormHomePage() {
               <button
                 type="button"
                 onClick={() => {
-                  setBedNo('')
-                  setErrorMessage('')
-                }}
+  setBedNo('')
+  setPatientSurname('')
+  setWristbandScanned(false)
+  setScanMessage('')
+  setErrorMessage('')
+}}
                 disabled={!bedNo || isOpening}
                 className="rounded-2xl bg-gray-100 px-4 py-4 text-base font-bold text-gray-600 transition hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-40 sm:py-5 sm:text-lg"
               >
@@ -208,6 +391,59 @@ export default function FormHomePage() {
           </div>
         </section>
       </div>
+      {showScanner && (
+  <div
+    className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 p-4"
+    onClick={stopScanner}
+  >
+    <div
+      className="w-full max-w-[560px] rounded-3xl bg-white p-5 shadow-2xl md:p-6"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">
+            Scan Patient Wristband
+          </h2>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Point the rear camera at the wristband QR code
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={stopScanner}
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-2xl font-bold text-gray-600"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="mt-5 overflow-hidden rounded-2xl bg-black">
+        <div
+          id={scannerContainerId}
+          className="min-h-[320px] w-full"
+        />
+      </div>
+
+      {scanMessage && (
+        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          {scanMessage}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={stopScanner}
+        className="mt-5 w-full rounded-2xl bg-gray-100 px-4 py-4 font-bold text-gray-700"
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+)}
+       <BottomNav />
     </main>
   )
 }

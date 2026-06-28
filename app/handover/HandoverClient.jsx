@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Bell, Mars, Venus } from 'lucide-react'
+import BottomNav from '../components/BottomNav'
 
 export default function HandoverPage({
   initialTab = 'observation'
@@ -947,46 +948,25 @@ const forAdmissionPsyCases = psychiatricCases.filter((item) =>
 )
 
   return (
-    <main className="min-h-screen bg-[#F5F5F7] pb-28">
+    <main className="min-h-screen bg-[#F5F5F7] pb-32 md:pb-36">
       {/* Header */}
       <div className="h-20 md:h-28 bg-[#0078AE] text-white shadow-sm px-5 md:px-8 flex flex-col justify-center">
   <h1 className="text-xl md:text-3xl font-bold">
-    Handover
-  </h1>
+  {handoverTab === 'psy'
+    ? 'Psychiatric Handover'
+    : 'Observation Handover'}
+</h1>
 
-  <p className="text-sm md:text-lg text-white/80">
-    Observation handover board
-  </p>
+<p className="text-sm md:text-lg text-white/80">
+  {handoverTab === 'psy'
+    ? 'Psychiatric patient handover board'
+    : 'Observation Room handover board'}
+</p>
 </div>
 
     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-6 md:mt-8 mb-4 md:mb-6 px-4 md:px-8">
         </div>
 
-<div className="px-4 md:px-8 mt-5">
-  <div className="bg-white border border-gray-200 rounded-2xl p-1 inline-flex shadow-sm">
-    <button
-      onClick={() => setHandoverTab('observation')}
-      className={`px-4 md:px-6 py-3 rounded-xl font-bold transition ${
-        handoverTab === 'observation'
-          ? 'bg-[#0078AE] text-white shadow'
-          : 'text-gray-500 hover:bg-gray-100'
-      }`}
-    >
-      Observation Room
-    </button>
-
-    <button
-      onClick={() => setHandoverTab('psy')}
-      className={`px-4 md:px-6 py-3 rounded-xl font-bold transition ${
-        handoverTab === 'psy'
-          ? 'bg-[#0078AE] text-white shadow'
-          : 'text-gray-500 hover:bg-gray-100'
-      }`}
-    >
-      Psychiatric Cases
-    </button>
-  </div>
-</div>
 
  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-6 md:mt-8 mb-4 md:mb-6 px-4 md:px-8">
   <Link
@@ -1105,7 +1085,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
   <div
     key={item.id}
     onClick={() => openObservationDetail(item)}
-    className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition"
+   className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b-4 border-gray-300 cursor-pointer hover:bg-gray-50 transition"
   > 
                   {/* Bed card */}
                   <div className="p-4 md:p-5 md:border-r border-gray-100">
@@ -1465,7 +1445,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
           </div>
 
 ) : (
- <div className="bg-white rounded-[28px] md:rounded-[36px] shadow-sm border border-gray-200 overflow-hidden mx-4 md:mx-8">
+<div className="bg-white rounded-[28px] md:rounded-[36px] shadow-sm border border-gray-200 overflow-hidden">
 
   {/* Header row */}
   <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] bg-gray-50 border-b border-gray-200">
@@ -1501,7 +1481,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
       <div
   key={item.id}
   onClick={() => openPsyEditModal(item)}
-  className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b border-gray-100 hover:bg-gray-50 transition cursor-pointer bg-white"
+  className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b-4 border-gray-300 hover:bg-gray-50 transition cursor-pointer bg-white"
 >
         {/* Case Card */}
         <div className="p-4 md:p-5 md:border-r border-gray-100 bg-gray-50 md:bg-white">
@@ -1798,7 +1778,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
 
 {detailModal && (
   <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]"
     onClick={() => setDetailModal(null)}
   >
     <div
@@ -1943,7 +1923,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
 )}
 {hideConfirmModal && (
   <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60]"
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]"
     onClick={() => setHideConfirmModal(null)}
   >
     <div
@@ -1991,7 +1971,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
 
 {psyHideConfirmModal && (
   <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[90] px-4"
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200] px-4"
     onClick={() => setPsyHideConfirmModal(null)}
   >
     <div
@@ -2064,7 +2044,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
 
 {addHandoverModal && (
   <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60]"
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]"
     onClick={() => setAddHandoverModal(false)}
   >
     <div
@@ -2112,7 +2092,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
 )}
 {addPsyCaseModal && (
   <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[70]"
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]"
    onClick={() => {
   setAddPsyCaseModal(false)
   resetPsyForm()
@@ -2313,7 +2293,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
 )}
 {psyEditModal && (
   <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[80]"
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]"
     onClick={() => setPsyEditModal(null)}
   >
     <div
@@ -2697,7 +2677,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
 
 {psyDischargeConfirmModal && (
   <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[100] px-4"
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200] px-4"
     onClick={() => {
       if (!isPsyDischarging) {
         setPsyDischargeConfirmModal(null)
@@ -2768,33 +2748,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
   </div>
 )}
 
-      {/* Bottom nav */}
-     <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] left-0 w-full px-4 z-50 pointer-events-none">
-  <div className="grid grid-cols-3 gap-3 pointer-events-auto">
-
-    <Link
-      href="/dashboard"
-      className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white hover:bg-gray-300 text-gray-500 border"
-    >
-      HOME
-    </Link>
-
-    <Link
-      href="/handover"
-      className="py-4 text-center font-bold rounded-3xl shadow-xl bg-[#0078AE] hover:bg-[#00638F] text-white"
-    >
-      HANDOVER
-    </Link>
-
-    <Link
-      href="/history"
-      className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white text-gray-500 hover:bg-gray-300 border"
-    >
-      HISTORY
-    </Link>
-
-  </div>
-</div>
+     <BottomNav />
     </main>
   )
 }

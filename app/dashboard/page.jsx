@@ -13,7 +13,8 @@ import {
 
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import Link from 'next/link'
+import BottomNav from '../components/BottomNav'
+
 
 export default function DashboardPage() {
   const [cases, setCases] = useState([])
@@ -123,15 +124,41 @@ function getAlertColor(minutes) {
   setModalCases(list)
 }
 async function handleAcknowledge(id) {
-  const { error } = await supabase
+  const acknowledgedAt = new Date().toISOString()
+
+  const { error: observationError } = await supabase
     .from('observation_cases')
     .update({
-      acknowledged_at: new Date().toISOString(),
+      acknowledged_at: acknowledgedAt,
       status: 'in_observation'
     })
     .eq('id', id)
 
-  if (!error) fetchCases()
+  if (observationError) {
+    console.error(
+      'Acknowledge observation case error:',
+      observationError
+    )
+    return
+  }
+
+  const { error: psyError } = await supabase
+    .from('psy_handover_cases')
+    .update({
+      location: 'Observation Room',
+      updated_at: acknowledgedAt
+    })
+    .eq('observation_case_id', id)
+    .eq('handover_hidden', false)
+
+  if (psyError) {
+    console.error(
+      'Update psychiatric location error:',
+      psyError
+    )
+  }
+
+  fetchCases()
 }
 
 async function handleVS(id) {
@@ -957,7 +984,7 @@ const filteredCases = sortedCases.filter((item) => {
 
       
        {modalCases.length > 0 && (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]">
       <div className="bg-white rounded-3xl p-8 w-[500px] shadow-2xl">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-2xl font-bold">{modalTitle}</h2>
@@ -1008,7 +1035,7 @@ const filteredCases = sortedCases.filter((item) => {
     </div>
        )}
        {actionModal && (
-  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]">
     
     <div className="bg-white rounded-3xl p-8 w-[520px] shadow-2xl">
 
@@ -1126,7 +1153,7 @@ const filteredCases = sortedCases.filter((item) => {
 
     {changeBedModal && (
   <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60]"
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]"
    onClick={() => {
   setChangeBedModal(null)
   setNewBedNo('')
@@ -1202,7 +1229,7 @@ const filteredCases = sortedCases.filter((item) => {
 )}
     {detailModal && (
 <div
-  className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+  className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]"
   onClick={() => setDetailModal(null)}
 >
     <div
@@ -1343,9 +1370,11 @@ const filteredCases = sortedCases.filter((item) => {
 
 <button
   onClick={() => {
-    setChangeBedModal(detailModal)
-    setNewBedNo('')
-  }}
+  setChangeBedModal(detailModal)
+  setNewBedNo('')
+  setChangeBedError('')
+  setDetailModal(null)
+}}
   className="w-full mt-3 bg-gray-200 text-gray-700 py-3 rounded-2xl font-bold hover:bg-gray-300"
 >
   Change Bed
@@ -1358,7 +1387,7 @@ const filteredCases = sortedCases.filter((item) => {
 )}
 {q1hModal && (
   <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]"
     onClick={() => setQ1hModal(false)}
   >
     <div
@@ -1396,7 +1425,7 @@ const filteredCases = sortedCases.filter((item) => {
 )}
 {dropQ1hModal && (
   <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]"
     onClick={() => setDropQ1hModal(false)}
   >
     <div
@@ -1432,6 +1461,9 @@ const filteredCases = sortedCases.filter((item) => {
     </div>
   </div>
 )}
+
+<BottomNav />
+
     </div>
 
 
@@ -1551,32 +1583,7 @@ function SmallCard({ title, list, icon, color, onViewAll, extraButton }) {
 
 
         ))}
-      <div className="fixed bottom-[calc(env(safe-area-inset-bottom)+16px)] left-0 w-full px-4 z-50 pointer-events-none">
-  <div className="grid grid-cols-3 gap-3 pointer-events-auto">
-
-    <Link
-      href="/dashboard"
-      className="py-4 text-center font-bold rounded-3xl shadow-xl bg-[#0078AE] hover:bg-[#00638F] text-white"
-    >
-      HOME
-    </Link>
-
-    <Link
-      href="/handover"
-      className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white text-gray-500 hover:bg-gray-300 border"
-    >
-      HANDOVER
-    </Link>
-
-    <Link
-      href="/history"
-      className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white text-gray-500 hover:bg-gray-300 border"
-    >
-      HISTORY
-    </Link>
-
-  </div>
-</div>
+      
       </div>
 
       {list.length > 6 && (

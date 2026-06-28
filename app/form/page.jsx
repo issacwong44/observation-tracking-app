@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import { useRouter } from 'next/navigation' 
+import BottomNav from '../components/BottomNav'
 
 function FormContent() {
 
@@ -23,6 +24,10 @@ const [remarks, setRemarks] = useState('')
 const [warningModal, setWarningModal] = useState(null)
 const [diagnosis, setDiagnosis] = useState('')
 
+const [successModal, setSuccessModal] = useState(false)
+
+const [patientSurname, setPatientSurname] = useState('')
+
 const diagnosisOptions = [
   'Chest pain',
   'Abdominal pain',
@@ -40,6 +45,20 @@ const diagnosisOptions = [
   'Others'
 ]
 
+function getSpecialPadRoom(bedNo) {
+  const normalizedBed = String(bedNo).trim()
+
+  if (normalizedBed === '23') {
+    return 'Pad Room 7'
+  }
+
+  if (normalizedBed === '24') {
+    return 'Pad Room 7A'
+  }
+
+  return null
+}
+
 const router = useRouter()
 
 useEffect(() => {
@@ -55,9 +74,34 @@ useEffect(() => {
   }
 }, [])
 
+useEffect(() => {
+  const storedSurname =
+    sessionStorage.getItem(
+      'observation_patient_surname'
+    )
+
+  if (!storedSurname) return
+
+  setPatientSurname(storedSurname)
+
+  sessionStorage.removeItem(
+    'observation_patient_surname'
+  )
+}, [])
+
 async function handleSubmit(e) {
   e.preventDefault()
 
+   if (!patientSurname.trim()) {
+    alert(
+      'Please scan the patient wristband or enter the surname'
+    )
+    return
+  }
+
+   const specialPadRoom = getSpecialPadRoom(bed)
+  const submittedAt = new Date().toISOString()
+  
   const { data: existingBed } = await supabase
     .from('observation_cases')
     .select('*')
@@ -76,12 +120,15 @@ const { data: newCase, error } = await supabase
   .from('observation_cases')
   .insert([
     {
-      bed_no: bed,
+  bed_no: bed,
 
-      gender: gender,
-      age: age,
-      category: category,
-      diagnosis: diagnosis,
+  patient_surname:
+    patientSurname.trim().toUpperCase() || null,
+
+  gender: gender,
+  age: age,
+  category: category,
+  diagnosis: diagnosis,
 
       fall_risk: fallRisk,
       missing_risk: psySpMissing.join(', '),
@@ -93,7 +140,13 @@ const { data: newCase, error } = await supabase
 
       remarks: remarks,
 
-      status: 'pending_ack',
+      acknowledged_at: specialPadRoom
+  ? submittedAt
+  : null,
+
+status: specialPadRoom
+  ? 'in_observation'
+  : 'pending_ack',
 
       handover_seen: hasNursingHandover
         ? false
@@ -114,7 +167,6 @@ const { data: newCase, error } = await supabase
   }
 
   if (newCase && psySpMissing.length > 0) {
-    alert(`Creating psychiatric case: ${psySpMissing.join(', ')}`)
     const { error: psyError } = await supabase
       .from('psy_handover_cases')
       .insert([
@@ -122,13 +174,17 @@ const { data: newCase, error } = await supabase
           observation_case_id: newCase.id,
 
           bed_no: bed,
-          patient_label: `Bed ${bed}`,
+          patient_label:
+  patientSurname.trim().toUpperCase() ||
+  `Bed ${bed}`,
 
           gender: gender,
           age: age,
-          diagnosis: diagnosis,
+          chief_complaint: diagnosis,
 
-          location: `Bed ${bed}`,
+          location: specialPadRoom
+  ? specialPadRoom
+  : 'Cubicle',
 risk_type: psySpMissing.join(', '),
 
          status: 'Pending Doctor Consultation',
@@ -150,22 +206,24 @@ risk_type: psySpMissing.join(', '),
     }
   }
 
-  alert('Case submitted')
+  setSuccessModal(true)
 
+setPatientSurname('')
   setGender('')
-  setAge('')
-  setCategory('')
-  setFallRisk('No')
-  setPsySpMissing([])
-  setHeadInjury('No')
-  setQ1h('No')
-  setHandover([])
-  setRemarks('')
+setAge('')
+setCategory('')
+setDiagnosis('')
+setFallRisk('No')
+setPsySpMissing([])
+setHeadInjury('No')
+setQ1h('No')
+setHandover([])
+setRemarks('')
 }
 
 
   return (
-<div className="min-h-screen bg-[#f4f6f8] pb-40 px-4 py-4 md:px-8">
+<div className="min-h-screen bg-[#f4f6f8] px-4 pt-4 pb-32 md:px-8 md:pt-6 md:pb-36">
 
     <div className="bg-[#0078AE] hover:bg-[#00638F] px-4 md:px-6 py-4 md:py-5 shadow-lg rounded-2xl">
 
@@ -181,9 +239,17 @@ risk_type: psySpMissing.join(', '),
           </p>
         </div>
 
-        <div className="text-white text-2xl font-bold">
-          Bed {bed}
-        </div>
+        <div className="text-white text-left md:text-right">
+  <p className="text-2xl font-bold">
+    Bed {bed}
+  </p>
+
+  {patientSurname && (
+  <p className="mt-1 text-sm md:text-base text-white/80">
+    {patientSurname}
+  </p>
+)}
+</div>
 
       </div>
 
@@ -192,6 +258,24 @@ risk_type: psySpMissing.join(', '),
     <div className="p-4 md:p-6">
      <form onSubmit={handleSubmit} className="space-y-6">
         <div>
+          <div>
+  <label className="block font-bold mb-2">
+    Patient Surname
+  </label>
+
+  <input
+    type="text"
+    value={patientSurname}
+    onChange={(e) =>
+      setPatientSurname(
+        e.target.value.toUpperCase()
+      )
+    }
+    placeholder="Scan wristband or enter surname"
+    className="w-full border p-3 rounded-xl uppercase"
+  />
+
+</div>
           <label className="block font-bold mb-2">Gender</label>
           <div className="flex gap-3">
               <button
@@ -447,7 +531,7 @@ risk_type: psySpMissing.join(', '),
       </form>
     </div>
        {warningModal && (
-      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]">
         <div className="bg-white rounded-3xl p-8 w-[520px] shadow-2xl">
           <div className="bg-[#0078AE] text-white rounded-2xl p-5 mb-6">
             <h2 className="text-3xl font-bold">
@@ -493,6 +577,33 @@ risk_type: psySpMissing.join(', '),
         </div>
       </div>
     )}
+
+    {successModal && (
+  <div
+    className="fixed inset-0 z-[210] flex items-center justify-center bg-black/40 px-4"
+  >
+    <div className="w-full max-w-[440px] rounded-3xl bg-white p-6 shadow-2xl md:p-8">
+      <div className="mb-6 rounded-2xl border border-green-200 bg-green-50 p-5">
+        <h2 className="text-2xl font-bold text-green-700">
+          Case Submitted
+        </h2>
+
+        <p className="mt-2 text-gray-600">
+          Bed {bed} has been added successfully.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => router.push('/form-home')}
+        className="w-full rounded-2xl bg-[#0078AE] px-4 py-4 text-lg font-bold text-white hover:bg-[#00638F]"
+      >
+        Return/ Add Another Case
+      </button>
+    </div>
+  </div>
+)}
+    <BottomNav />
   </div>
   )
 }

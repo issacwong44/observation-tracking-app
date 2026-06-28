@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
+import BottomNav from '../components/BottomNav'
 
 export default function HistoryPage() {
   const [cases, setCases] = useState([])
@@ -37,7 +38,7 @@ const filteredHistoryCases = historyCases.filter((item) => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f4f6f8] pb-40">
+    <div className="min-h-screen bg-[#f4f6f8] pb-32 md:pb-36">
       <div className="bg-[#0078AE] px-8 py-6 text-white">
         <h1 className="text-3xl font-bold">History</h1>
         <p className="text-white/80">Discharged observation cases</p>
@@ -54,7 +55,7 @@ const filteredHistoryCases = historyCases.filter((item) => {
     placeholder="Search Bed / Handover / Remarks"
     value={searchTerm}
     onChange={(e) => setSearchTerm(e.target.value)}
-    className="border border-gray-300 rounded-2xl px-4 py-3 w-[320px] shadow-sm outline-none focus:ring-2 focus:ring-[#0078AE]"
+    className="w-full md:w-[320px] border border-gray-300 rounded-2xl px-4 py-3 shadow-sm outline-none focus:ring-2 focus:ring-[#0078AE]"
   />
 </div>
 
@@ -107,34 +108,7 @@ const filteredHistoryCases = historyCases.filter((item) => {
           </div>
         </div>
       </div>
-      <div className="fixed bottom-4 left-0 w-full px-4 z-50">
-
-  <div className="grid grid-cols-3 gap-3">
-
-  <Link
-    href="/dashboard"
-    className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white text-gray-500 hover:bg-gray-300 border"
-  >
-    HOME
-      </Link>
-
-  <Link
-    href="/handover"
-    className="py-4 text-center font-bold rounded-3xl shadow-xl bg-white text-gray-500 hover:bg-gray-300 border"
-  >
-    HANDOVER
-  </Link>
-
-  <Link
-    href="/history"
-    className="py-4 text-center font-bold rounded-3xl shadow-xl bg-[#0078AE] hover:bg-[#00638F] text-white"
-  >
-    HISTORY
-  </Link>
-
-</div>
-
-</div>
+     <BottomNav />
     </div>
   )
 }
