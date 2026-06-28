@@ -14,6 +14,7 @@ export default function FormHomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isOpening, setIsOpening] = useState(false)
 
+  const scanHandledRef = useRef(false)
   const [showScanner, setShowScanner] = useState(false)
 const [scanMessage, setScanMessage] = useState('')
 const [patientSurname, setPatientSurname] = useState('')
@@ -88,27 +89,30 @@ const scannerContainerId = 'patient-wristband-reader'
 }
 
 async function stopScanner() {
-  if (scannerRef.current) {
-    try {
-      const scannerState =
-        scannerRef.current.getState?.()
+  const scanner = scannerRef.current
 
-      if (scannerState === 2 || scannerState === 3) {
-        await scannerRef.current.stop()
+  scannerRef.current = null
+
+  if (scanner) {
+    try {
+      const state = scanner.getState?.()
+
+      if (state === 2 || state === 3) {
+        await scanner.stop()
       }
 
-      await scannerRef.current.clear()
+      await scanner.clear()
     } catch (error) {
       console.error('Stop scanner error:', error)
     }
-
-    scannerRef.current = null
   }
 
   setShowScanner(false)
 }
 
 async function startScanner() {
+  scanHandledRef.current = false
+  
   setErrorMessage('')
   setScanMessage('')
   setShowScanner(true)
@@ -139,26 +143,29 @@ async function startScanner() {
         aspectRatio: 1.4
       },
       async (decodedText) => {
-        const scannedSurname =
-  extractPatientSurname(decodedText)
+  if (scanHandledRef.current) return
 
-if (!scannedSurname) {
-  setScanMessage(
-    'Unable to recognise this patient wristband QR code.'
-  )
-  return
+  const scannedSurname =
+    extractPatientSurname(decodedText)
+
+  if (!scannedSurname) {
+    setScanMessage(
+      'Unable to recognise this patient wristband QR code.'
+    )
+    return
+  }
+
+  scanHandledRef.current = true
+
+  setPatientSurname(scannedSurname)
+  setWristbandScanned(true)
+  setScanMessage('')
+
+  await stopScanner()
+},
+() => {
+  // 掃描期間未讀到QR，不需要顯示error
 }
-
-setPatientSurname(scannedSurname)
-setWristbandScanned(true)
-
-await stopScanner()
-
-        await stopScanner()
-      },
-      () => {
-        // 掃描期間未讀到QR，不需要顯示error
-      }
     )
   } catch (error) {
     console.error('Start scanner error:', error)
@@ -200,14 +207,14 @@ await stopScanner()
 
   const selectedBed = bedNo.trim()
   const selectedSurname =
-  patientSurname.trim().toUpperCase()
+    patientSurname.trim().toUpperCase()
 
-if (!selectedSurname) {
-  setErrorMessage(
-    'Please scan the patient wristband first'
-  )
-  return
-}
+  if (!selectedSurname) {
+    setErrorMessage(
+      'Please scan the patient wristband first'
+    )
+    return
+  }
 
   const validationError =
     validateBedNumber(selectedBed)
@@ -221,9 +228,9 @@ if (!selectedSurname) {
   setIsOpening(true)
 
   sessionStorage.setItem(
-  'observation_patient_surname',
-  selectedSurname
-)
+    'observation_patient_surname',
+    selectedSurname
+  )
 
   router.push(
     `/form?bed=${encodeURIComponent(selectedBed)}`
