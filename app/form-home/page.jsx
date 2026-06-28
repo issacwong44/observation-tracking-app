@@ -73,18 +73,36 @@ const scannerContainerId = 'patient-wristband-reader'
     setIsLoading(false)
   }
 
- function extractPatientSurname(decodedText) {
-  const value = decodedText.trim()
+function extractPatientSurname(decodedText) {
+  const value = String(decodedText || '')
+    .replace(/\r?\n/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase()
 
+  // 真實格式：
+  // WB M1234567CHEN, RUAN
+  // WB AB1234569WONG, SIU MING
   const match = value.match(
-    /^WB\s+\S+\s+([^,]+),/i
+    /^WB\s+[A-Z]{1,2}\d{6}\(?[0-9A]\)?([A-Z][A-Z' -]*),/
   )
 
-  if (!match) {
-    return null
+  if (match) {
+    return match[1].trim()
   }
 
-  return match[1].trim().toUpperCase()
+  // 測試QR用咗x代替數字，例如：
+  // WB MXXXXXXXYCHEN, RUAN
+  // 假設測試HKID部分固定為9個字元
+  const testMatch = value.match(
+    /^WB\s+\S{9}([A-Z][A-Z' -]*),/
+  )
+
+  if (testMatch) {
+    return testMatch[1].trim()
+  }
+
+  return null
 }
 
 async function stopScanner() {
