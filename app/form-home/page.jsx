@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import BottomNav from '../components/BottomNav'
@@ -14,14 +14,13 @@ export default function FormHomePage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isOpening, setIsOpening] = useState(false)
 
-  const scanHandledRef = useRef(false)
+  
   const [showScanner, setShowScanner] = useState(false)
 const [scanMessage, setScanMessage] = useState('')
 const [patientSurname, setPatientSurname] = useState('')
 const [wristbandScanned, setWristbandScanned] = useState(false)
 
-const scannerRef = useRef(null)
-const scannerContainerId = 'patient-wristband-reader'
+
 
   useEffect(() => {
     fetchActiveCases()
@@ -46,16 +45,93 @@ const scannerContainerId = 'patient-wristband-reader'
     }
   }, [])
 
-  useEffect(() => {
-  return () => {
-    const scanner = scannerRef.current
-    scannerRef.current = null
+useEffect(() => {
+  if (!showScanner) return
 
-    if (scanner) {
+  let scanner
+  let isStopped = false
+  let hasScanned = false
+
+  async function runScanner() {
+    const { Html5Qrcode } = await import('html5-qrcode')
+
+    scanner = new Html5Qrcode('reader')
+
+    await scanner.start(
+      {
+        facingMode: 'environment',
+      },
+      {
+        fps: 5,
+        qrbox: {
+          width: 220,
+          height: 220,
+        },
+      },
+      async (decodedText) => {
+        if (hasScanned) return
+
+        hasScanned = true
+
+        const scannedSurname =
+          extractPatientSurname(decodedText)
+
+        if (!scannedSurname) {
+          hasScanned = false
+
+          setScanMessage(
+            `Unable to recognise wristband format: ${decodedText}`
+          )
+
+          return
+        }
+
+        setPatientSurname(scannedSurname)
+        setWristbandScanned(true)
+        setScanMessage('')
+
+        try {
+          if (!isStopped && scanner) {
+            isStopped = true
+            await scanner.stop()
+          }
+        } catch (error) {
+          console.log(
+            'Scanner stop ignored:',
+            error
+          )
+        }
+
+        setTimeout(() => {
+          setShowScanner(false)
+        }, 300)
+      },
+      () => {
+        // Ignore normal frame scan errors
+      }
+    )
+  }
+
+  runScanner().catch((error) => {
+    console.error(
+      'Scanner start error:',
+      error
+    )
+
+    setScanMessage(
+      'Unable to start camera scanner.'
+    )
+
+    setShowScanner(false)
+  })
+
+  return () => {
+    if (scanner && !isStopped) {
+      isStopped = true
       scanner.stop().catch(() => {})
     }
   }
-}, [])
+}, [showScanner])
 
   async function fetchActiveCases() {
     const { data, error } = await supabase
@@ -80,122 +156,21 @@ function extractPatientSurname(decodedText) {
     .trim()
     .toUpperCase()
 
-  // 真實格式：
-  // WB M1234567CHEN, RUAN
-  // WB AB1234569WONG, SIU MING
+  // 支援：
+  // WB A1234567WONG, SIU MING
+  // WB AB1234569CHAN, TAI MAN
+  // WB A123456(A)LEE, MAY
   const match = value.match(
     /^WB\s+[A-Z]{1,2}\d{6}\(?[0-9A]\)?([A-Z][A-Z' -]*),/
   )
 
-  if (match) {
-    return match[1].trim()
+  if (!match) {
+    return null
   }
 
-  // 測試QR用咗x代替數字，例如：
-  // WB MXXXXXXXYCHEN, RUAN
-  // 假設測試HKID部分固定為9個字元
-  const testMatch = value.match(
-    /^WB\s+\S{9}([A-Z][A-Z' -]*),/
-  )
-
-  if (testMatch) {
-    return testMatch[1].trim()
-  }
-
-  return null
+  return match[1].trim()
 }
 
-async function stopScanner() {
-  const scanner = scannerRef.current
-
-  scannerRef.current = null
-
-  if (scanner) {
-    try {
-      await scanner.stop()
-    } catch (error) {
-      console.log('Scanner already stopped:', error)
-    }
-  }
-
-  setShowScanner(false)
-}
-
-async function startScanner() {
-  scanHandledRef.current = false
-  
-  setErrorMessage('')
-  setScanMessage('')
-  setShowScanner(true)
-
-  try {
-    const { Html5Qrcode } = await import('html5-qrcode')
-
-    await new Promise((resolve) =>
-      setTimeout(resolve, 250)
-    )
-
-    const scanner = new Html5Qrcode(
-      scannerContainerId
-    )
-
-    scannerRef.current = scanner
-
-await scanner.start(
-  {
-    facingMode: 'environment'
-  },
-  {
-    fps: 8,
-    qrbox: {
-      width: 240,
-      height: 160
-    },
-    aspectRatio: 1.4
-  },
-  async (decodedText) => {
-    if (scanHandledRef.current) return
-
-    const scannedSurname =
-      extractPatientSurname(decodedText)
-
-    if (!scannedSurname) {
-      setScanMessage(
-        'Unable to recognise this patient wristband QR code.'
-      )
-      return
-    }
-
-    scanHandledRef.current = true
-
-    try {
-      scannerRef.current?.pause(true)
-    } catch (error) {
-      console.log('Pause scanner error:', error)
-    }
-
-    setPatientSurname(scannedSurname)
-    setWristbandScanned(true)
-    setScanMessage('')
-
-    setTimeout(() => {
-      stopScanner()
-    }, 500)
-  },
-  () => {
-    // Ignore scanning errors
-  }
-)
-  } catch (error) {
-    console.error('Start scanner error:', error)
-
-    setShowScanner(false)
-
-    setErrorMessage(
-      'Unable to open camera. Please allow camera access.'
-    )
-  }
-}
 
   function validateBedNumber(value) {
     const trimmedValue = value.trim()
@@ -285,13 +260,16 @@ await scanner.start(
 
   {!wristbandScanned ? (
     <button
-      type="button"
-      onClick={startScanner}
-      disabled={isOpening}
-      className="mt-3 w-full rounded-2xl border-2 border-[#0078AE] bg-white px-4 py-5 text-lg font-bold text-[#0078AE] transition hover:bg-blue-50 disabled:opacity-50"
-    >
-      Scan Patient Wristband QR
-    </button>
+  type="button"
+  onClick={() => {
+    setScanMessage('')
+    setShowScanner(true)
+  }}
+  disabled={isOpening}
+  className="mt-3 w-full rounded-2xl border-2 border-[#0078AE] bg-white px-4 py-5 text-lg font-bold text-[#0078AE] transition hover:bg-blue-50 disabled:opacity-50"
+>
+  Scan Patient Wristband QR
+</button>
   ) : (
     <div className="mt-3 rounded-2xl border border-green-200 bg-green-50 p-4">
       <div className="flex items-start justify-between gap-4">
@@ -303,19 +281,20 @@ await scanner.start(
           <p className="mt-2 text-xl font-bold text-gray-900">
             {patientSurname}
           </p>
-
-          <p className="mt-1 text-sm text-gray-500">
-            Patient ID: {patientId}
-          </p>
         </div>
 
         <button
-          type="button"
-          onClick={startScanner}
-          className="rounded-xl bg-white px-3 py-2 text-sm font-bold text-[#0078AE] shadow-sm"
-        >
-          Scan Again
-        </button>
+  type="button"
+  onClick={() => {
+    setPatientSurname('')
+    setWristbandScanned(false)
+    setScanMessage('')
+    setShowScanner(true)
+  }}
+  className="rounded-xl bg-white px-3 py-2 text-sm font-bold text-[#0078AE] shadow-sm"
+>
+  Scan Again
+</button>
       </div>
     </div>
   )}
@@ -418,13 +397,8 @@ await scanner.start(
         </section>
       </div>
       {showScanner && (
-  <div
-    className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 p-4"
-  >
-    <div
-      className="w-full max-w-[560px] rounded-3xl bg-white p-5 shadow-2xl md:p-6"
-      onClick={(e) => e.stopPropagation()}
-    >
+  <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 p-4">
+    <div className="w-full max-w-[560px] rounded-3xl bg-white p-5 shadow-2xl md:p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">
@@ -438,7 +412,9 @@ await scanner.start(
 
         <button
           type="button"
-          onClick={stopScanner}
+          onClick={() => {
+            setShowScanner(false)
+          }}
           className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-2xl font-bold text-gray-600"
         >
           ×
@@ -447,20 +423,22 @@ await scanner.start(
 
       <div className="mt-5 overflow-hidden rounded-2xl bg-black">
         <div
-          id={scannerContainerId}
+          id="reader"
           className="min-h-[320px] w-full"
         />
       </div>
 
       {scanMessage && (
-        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+        <div className="mt-4 break-words rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
           {scanMessage}
         </div>
       )}
 
       <button
         type="button"
-        onClick={stopScanner}
+        onClick={() => {
+          setShowScanner(false)
+        }}
         className="mt-5 w-full rounded-2xl bg-gray-100 px-4 py-4 font-bold text-gray-700"
       >
         Cancel
