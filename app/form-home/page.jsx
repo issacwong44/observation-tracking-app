@@ -48,12 +48,11 @@ const scannerContainerId = 'patient-wristband-reader'
 
   useEffect(() => {
   return () => {
-    if (scannerRef.current) {
-      scannerRef.current
-        .stop()
-        .catch(() => {})
+    const scanner = scannerRef.current
+    scannerRef.current = null
 
-      scannerRef.current = null
+    if (scanner) {
+      scanner.stop().catch(() => {})
     }
   }
 }, [])
@@ -95,15 +94,9 @@ async function stopScanner() {
 
   if (scanner) {
     try {
-      const state = scanner.getState?.()
-
-      if (state === 2 || state === 3) {
-        await scanner.stop()
-      }
-
-      await scanner.clear()
+      await scanner.stop()
     } catch (error) {
-      console.error('Stop scanner error:', error)
+      console.log('Scanner already stopped:', error)
     }
   }
 
@@ -130,43 +123,51 @@ async function startScanner() {
 
     scannerRef.current = scanner
 
-    await scanner.start(
-      {
-        facingMode: 'environment'
-      },
-      {
-        fps: 10,
-        qrbox: {
-          width: 260,
-          height: 180
-        },
-        aspectRatio: 1.4
-      },
-      async (decodedText) => {
-  if (scanHandledRef.current) return
+await scanner.start(
+  {
+    facingMode: 'environment'
+  },
+  {
+    fps: 8,
+    qrbox: {
+      width: 240,
+      height: 160
+    },
+    aspectRatio: 1.4
+  },
+  async (decodedText) => {
+    if (scanHandledRef.current) return
 
-  const scannedSurname =
-    extractPatientSurname(decodedText)
+    const scannedSurname =
+      extractPatientSurname(decodedText)
 
-  if (!scannedSurname) {
-    setScanMessage(
-      'Unable to recognise this patient wristband QR code.'
-    )
-    return
+    if (!scannedSurname) {
+      setScanMessage(
+        'Unable to recognise this patient wristband QR code.'
+      )
+      return
+    }
+
+    scanHandledRef.current = true
+
+    try {
+      scannerRef.current?.pause(true)
+    } catch (error) {
+      console.log('Pause scanner error:', error)
+    }
+
+    setPatientSurname(scannedSurname)
+    setWristbandScanned(true)
+    setScanMessage('')
+
+    setTimeout(() => {
+      stopScanner()
+    }, 500)
+  },
+  () => {
+    // Ignore scanning errors
   }
-
-  scanHandledRef.current = true
-
-  setPatientSurname(scannedSurname)
-  setWristbandScanned(true)
-  setScanMessage('')
-
-  await stopScanner()
-},
-() => {
-  // 掃描期間未讀到QR，不需要顯示error
-}
-    )
+)
   } catch (error) {
     console.error('Start scanner error:', error)
 
@@ -401,7 +402,6 @@ async function startScanner() {
       {showScanner && (
   <div
     className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 p-4"
-    onClick={stopScanner}
   >
     <div
       className="w-full max-w-[560px] rounded-3xl bg-white p-5 shadow-2xl md:p-6"
