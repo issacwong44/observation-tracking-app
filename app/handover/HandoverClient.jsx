@@ -722,7 +722,6 @@ async function handleAddPsyCase() {
         ? 'Please complete Gender, Age and AE reference'
         : 'Please scan the AE barcode and complete Gender, Age, Chief Complaint and Location'
     )
-
     return
   }
 
@@ -734,8 +733,64 @@ async function handleAddPsyCase() {
     alert(
       'AE reference must contain exactly 5 letters or numbers'
     )
-
     return
+  }
+
+  // Duplicate check只針對手動Ambulatory case
+  if (!selectedObservationCase) {
+    const {
+      data: existingObservationCase,
+      error: observationCheckError
+    } = await supabase
+      .from('observation_cases')
+      .select('id, bed_no, ae_suffix')
+      .eq('ae_suffix', normalizedPsyAeSuffix)
+      .is('confirmed_dc_at', null)
+      .maybeSingle()
+
+    if (observationCheckError) {
+      console.error(
+        'Check duplicate observation AE error:',
+        observationCheckError
+      )
+      alert('Unable to check duplicate AE reference')
+      return
+    }
+
+    if (existingObservationCase) {
+      alert(
+        `This AE reference already exists at Bed ${existingObservationCase.bed_no}. Please select the patient from Observation Room instead.`
+      )
+      return
+    }
+
+    const {
+      data: existingPsyCase,
+      error: psyCheckError
+    } = await supabase
+      .from('psy_handover_cases')
+      .select('id, bed_no, patient_label, ae_suffix')
+      .eq('ae_suffix', normalizedPsyAeSuffix)
+      .eq('handover_hidden', false)
+      .maybeSingle()
+
+    if (psyCheckError) {
+      console.error(
+        'Check duplicate psychiatric AE error:',
+        psyCheckError
+      )
+      alert('Unable to check duplicate AE reference')
+      return
+    }
+
+    if (existingPsyCase) {
+      alert(
+        existingPsyCase.bed_no
+          ? `This AE reference already has an active psychiatric case at Bed ${existingPsyCase.bed_no}.`
+          : 'This AE reference already has an active ambulatory psychiatric case.'
+      )
+      return
+    }
   }
 
   const { error } = await supabase
@@ -756,10 +811,7 @@ async function handleAddPsyCase() {
 
         gender: psyGender,
         age: psyAge,
-
-        location:
-          psyLocation.trim(),
-
+        location: psyLocation.trim(),
         chief_complaint:
           psyChiefComplaint.trim(),
 
