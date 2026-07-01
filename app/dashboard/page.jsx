@@ -772,8 +772,16 @@ const filteredCases = sortedCases.filter((item) => {
   className="bg-white hover:bg-gray-50 transition cursor-pointer"
 >
 
-        <td className="p-5 border border-gray-200 font-bold text-[#245C8F]">
-  {item.bed_no}
+        <td className="p-5 border border-gray-200">
+  <div className="font-bold text-[#245C8F]">
+    {item.bed_no}
+  </div>
+
+  {item.ae_suffix && (
+    <div className="mt-1 whitespace-nowrap text-[11px] font-semibold tracking-wider text-gray-500">
+      AE•••••{item.ae_suffix}
+    </div>
+  )}
 </td>
 
         <td className="p-5 border border-gray-200">
@@ -1238,9 +1246,17 @@ const filteredCases = sortedCases.filter((item) => {
 >
 
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-[#0078AE]">
-          Bed {detailModal.bed_no}
-        </h2>
+        <div>
+  <h2 className="text-2xl font-bold text-[#0078AE]">
+    Bed {detailModal.bed_no}
+  </h2>
+
+  {detailModal.ae_suffix && (
+    <p className="mt-1 text-xs font-semibold tracking-wider text-gray-500">
+      AE•••••{detailModal.ae_suffix}
+    </p>
+  )}
+</div>
 
         <button
           onClick={() => setDetailModal(null)}
@@ -1619,9 +1635,17 @@ function BedCaseCard({
 >
       
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-3xl font-bold text-[#006B8F]">
-          Bed {item.bed_no}
-        </h2>
+        <div>
+  <h2 className="text-3xl font-bold text-[#006B8F]">
+    Bed {item.bed_no}
+  </h2>
+
+  {item.ae_suffix && (
+    <p className="mt-1 text-xs font-semibold tracking-wider text-gray-500">
+      AE•••••{item.ae_suffix}
+    </p>
+  )}
+</div>
 
         <CategoryBadge category={item.category} />
       </div>

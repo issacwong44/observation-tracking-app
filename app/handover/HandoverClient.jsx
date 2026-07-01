@@ -1283,9 +1283,17 @@ const linkedPsyCase = getLinkedPsyCase(item)
   > 
                   {/* Bed card */}
                   <div className="p-4 md:p-5 md:border-r border-gray-100">
-                    <div className="inline-flex px-3 py-2 rounded-2xl bg-blue-100 text-[#0078AE] font-bold mb-3">
-                      Bed {item.bed_no}
-                    </div>
+                    <div className="mb-3">
+  <div className="inline-flex px-3 py-2 rounded-2xl bg-blue-100 text-[#0078AE] font-bold">
+    Bed {item.bed_no}
+  </div>
+
+  {item.ae_suffix && (
+    <p className="mt-2 text-xs font-semibold tracking-wider text-gray-500">
+      AE•••••{item.ae_suffix}
+    </p>
+  )}
+</div>
 
                     <div className="space-y-2 text-xs md:text-sm text-gray-500">
 
@@ -1679,13 +1687,19 @@ const linkedPsyCase = getLinkedPsyCase(item)
 >
         {/* Case Card */}
         <div className="p-4 md:p-5 md:border-r border-gray-100 bg-gray-50 md:bg-white">
-          <div className="inline-flex px-3 py-2 rounded-2xl bg-blue-100 text-[#0078AE] font-bold mb-3">
-           {item.bed_no
-  ? `Bed ${item.bed_no}`
-  : item.patient_label
-  ? item.patient_label.toUpperCase()
-  : 'Ambulatory Case'}
-          </div>
+          <div className="mb-3">
+  <div className="inline-flex px-3 py-2 rounded-2xl bg-blue-100 text-[#0078AE] font-bold">
+    {item.bed_no
+      ? `Bed ${item.bed_no}`
+      : 'Ambulatory Case'}
+  </div>
+
+  {item.ae_suffix && (
+    <p className="mt-2 text-xs font-semibold tracking-wider text-gray-500">
+      AE•••••{item.ae_suffix}
+    </p>
+  )}
+</div>
 
           <div className="space-y-2 text-xs md:text-sm text-gray-500">
            <div className="flex justify-between items-center">
@@ -1980,9 +1994,17 @@ const linkedPsyCase = getLinkedPsyCase(item)
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-[#0078AE]">
-          Bed {detailModal.bed_no}
-        </h2>
+       <div>
+  <h2 className="text-3xl font-bold text-[#0078AE]">
+    Bed {detailModal.bed_no}
+  </h2>
+
+  {detailModal.ae_suffix && (
+    <p className="mt-1 text-sm font-semibold tracking-wider text-gray-500">
+      AE•••••{detailModal.ae_suffix}
+    </p>
+  )}
+</div>
 
         <button
           onClick={() => setDetailModal(null)}
