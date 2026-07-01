@@ -696,73 +696,85 @@ const selectedObservationCase = selectedObservationCaseId
   : null
 
 async function handleAddPsyCase() {
-  const selectedObservationCase = selectedObservationCaseId
-    ? cases.find(
-        (item) =>
-          String(item.id) ===
-          String(selectedObservationCaseId)
-      )
-    : null
+  const selectedObservationCase =
+    selectedObservationCaseId
+      ? cases.find(
+          (item) =>
+            String(item.id) ===
+            String(selectedObservationCaseId)
+        )
+      : null
 
   const normalizedPsyAeSuffix =
-  psyAeSuffix.trim().toUpperCase()
+    psyAeSuffix.trim().toUpperCase()
 
-if (
-  !psyGender ||
-  !psyAge ||
-  (!selectedObservationCase &&
-    !psyChiefComplaint.trim()) ||
-  (!selectedObservationCase &&
-    !psyLocation.trim()) ||
-  !normalizedPsyAeSuffix
-) {
-  alert(
-  selectedObservationCase
-    ? 'Please complete Gender, Age and AE reference'
-    : 'Please scan the AE barcode and complete Gender, Age, Chief Complaint and Location'
-)
-if (
-  !/^[A-Z0-9]{5}$/.test(
-    normalizedPsyAeSuffix
-  )
-) {
-  alert(
-    'AE reference must contain exactly 5 letters or numbers'
-  )
-  return
-}
+  if (
+    !psyGender ||
+    !psyAge ||
+    (!selectedObservationCase &&
+      !psyChiefComplaint.trim()) ||
+    (!selectedObservationCase &&
+      !psyLocation.trim()) ||
+    !normalizedPsyAeSuffix
+  ) {
+    alert(
+      selectedObservationCase
+        ? 'Please complete Gender, Age and AE reference'
+        : 'Please scan the AE barcode and complete Gender, Age, Chief Complaint and Location'
+    )
+
+    return
+  }
+
+  if (
+    !/^[A-Z0-9]{5}$/.test(
+      normalizedPsyAeSuffix
+    )
+  ) {
+    alert(
+      'AE reference must contain exactly 5 letters or numbers'
+    )
+
+    return
+  }
 
   const { error } = await supabase
     .from('psy_handover_cases')
     .insert([
       {
-       observation_case_id:
-  selectedObservationCase?.id || null,
+        observation_case_id:
+          selectedObservationCase?.id || null,
 
-bed_no:
-  selectedObservationCase?.bed_no || null,
+        bed_no:
+          selectedObservationCase?.bed_no || null,
 
         ae_suffix:
-  normalizedPsyAeSuffix,
+          normalizedPsyAeSuffix,
 
-patient_label:
-  `AE•••••${normalizedPsyAeSuffix}`,
+        patient_label:
+          `AE•••••${normalizedPsyAeSuffix}`,
 
         gender: psyGender,
         age: psyAge,
 
-        location: psyLocation.trim(),
-        chief_complaint: psyChiefComplaint.trim(),
+        location:
+          psyLocation.trim(),
+
+        chief_complaint:
+          psyChiefComplaint.trim(),
 
         risk_type: '',
-       status: PSY_STATUS_PENDING_DOCTOR,
+        status: PSY_STATUS_PENDING_DOCTOR,
 
         progress: '',
         outcome: '',
         miscellaneous: '',
         free_text: '',
 
-        source: 'manual',
+        source: selectedObservationCase
+          ? 'observation_form'
+          : 'manual',
+
         handover_hidden: false
       }
     ])
@@ -777,6 +789,7 @@ patient_label:
   resetPsyForm()
   fetchPsyCases()
 }
+
 function openPsyEditModal(item) {
   setPsyEditModal(item)
 
