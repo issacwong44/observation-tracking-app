@@ -137,7 +137,7 @@ if (!/^[A-Z0-9]{5}$/.test(normalizedAeSuffix)) {
     )
     return
   }
-  
+
   const hasNursingHandover = handover.length > 0
 
 const { data: newCase, error } = await supabase
@@ -191,38 +191,43 @@ status: specialPadRoom
   }
 
   if (newCase && psySpMissing.length > 0) {
-    const { error: psyError } = await supabase
-      .from('psy_handover_cases')
-      .insert([
-        {
-          observation_case_id: newCase.id,
+  const { error: psyError } = await supabase
+    .from('psy_handover_cases')
+    .insert([
+      {
+        observation_case_id: newCase.id,
 
-          bed_no: bed,
-          patient_label:
-  normalizedAeSuffix
-    ? `AE•••••${normalizedAeSuffix}`
-    : `Bed ${bed}`,
+        bed_no: bed,
 
-          gender: gender,
-          age: age,
-          chief_complaint: diagnosis,
+        ae_suffix:
+          normalizedAeSuffix || null,
 
-          location: specialPadRoom
-  ? specialPadRoom
-  : 'Cubicle',
-risk_type: psySpMissing.join(', '),
+        patient_label:
+          normalizedAeSuffix
+            ? `AE•••••${normalizedAeSuffix}`
+            : `Bed ${bed}`,
 
-         status: 'Pending Doctor Consultation',
+        gender: gender,
+        age: age,
+        chief_complaint: diagnosis,
 
-          progress: '',
-          outcome: '',
-          miscellaneous: remarks || '',
-          free_text: '',
+        location: specialPadRoom
+          ? specialPadRoom
+          : 'Cubicle',
 
-          source: 'observation_form',
-          handover_hidden: false
-        }
-      ])
+        risk_type: psySpMissing.join(', '),
+
+        status: 'Pending Doctor Consultation',
+
+        progress: '',
+        outcome: '',
+        miscellaneous: remarks || '',
+        free_text: '',
+
+        source: 'observation_form',
+        handover_hidden: false
+      }
+    ])
 
     if (psyError) {
       console.log(psyError)

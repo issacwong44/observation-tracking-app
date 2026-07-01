@@ -32,7 +32,9 @@ const [psyGender, setPsyGender] = useState('')
 const [psyAge, setPsyAge] = useState('')
 const [psyChiefComplaint, setPsyChiefComplaint] = useState('')
 const [psyLocation, setPsyLocation] = useState('')
-const [psySurname, setPsySurname] = useState('')
+const [psyAeSuffix, setPsyAeSuffix] = useState('')
+const [showPsyAeScanner, setShowPsyAeScanner] = useState(false)
+const [psyAeScanMessage, setPsyAeScanMessage] = useState('')
 const [selectedObservationCaseId, setSelectedObservationCaseId] =
   useState('')
 
@@ -58,7 +60,26 @@ const [psyJudge, setPsyJudge] = useState(false)
 const [isPsyDischarging, setIsPsyDischarging] = useState(false)
 const [psyDischargeConfirmModal, setPsyDischargeConfirmModal] = useState(null)
 
+function extractAeSuffix(decodedText) {
+  const value = String(decodedText || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, '')
 
+  const match = value.match(/AE[A-Z0-9]+/)
+
+  if (!match) {
+    return null
+  }
+
+  const aeNumber = match[0]
+
+  if (aeNumber.length < 7) {
+    return null
+  }
+
+  return aeNumber.slice(-5)
+}
 
  useEffect(() => {
   fetchCases()
@@ -73,6 +94,91 @@ const [psyDischargeConfirmModal, setPsyDischargeConfirmModal] = useState(null)
 
   return () => clearInterval(interval)
 }, [isEditingNote])
+
+useEffect(() => {
+  if (!showPsyAeScanner) return
+
+  let scanner
+  let isStopped = false
+  let hasScanned = false
+
+  async function runPsyAeScanner() {
+    const { Html5Qrcode } = await import('html5-qrcode')
+
+    scanner = new Html5Qrcode('psy-ae-reader')
+
+    await scanner.start(
+      {
+        facingMode: 'environment',
+      },
+      {
+        fps: 8,
+        qrbox: {
+          width: 300,
+          height: 120,
+        },
+      },
+      async (decodedText) => {
+        if (hasScanned) return
+
+        hasScanned = true
+
+        const scannedAeSuffix =
+          extractAeSuffix(decodedText)
+
+        if (!scannedAeSuffix) {
+          hasScanned = false
+          setPsyAeScanMessage(
+            'Unable to recognise the AE barcode.'
+          )
+          return
+        }
+
+        setPsyAeSuffix(scannedAeSuffix)
+        setPsyAeScanMessage('')
+
+        try {
+          if (!isStopped && scanner) {
+            isStopped = true
+            await scanner.stop()
+          }
+        } catch (error) {
+          console.log(
+            'Psychiatric AE scanner stop ignored:',
+            error
+          )
+        }
+
+        setTimeout(() => {
+          setShowPsyAeScanner(false)
+        }, 300)
+      },
+      () => {
+        // Ignore normal scan errors
+      }
+    )
+  }
+
+  runPsyAeScanner().catch((error) => {
+    console.error(
+      'Psychiatric AE scanner start error:',
+      error
+    )
+
+    setPsyAeScanMessage(
+      'Unable to start camera scanner.'
+    )
+
+    setShowPsyAeScanner(false)
+  })
+
+  return () => {
+    if (scanner && !isStopped) {
+      isStopped = true
+      scanner.stop().catch(() => {})
+    }
+  }
+}, [showPsyAeScanner])
 
   async function fetchCases() {
     const { data, error } = await supabase
@@ -535,12 +641,13 @@ function handleSelectObservationCase(caseId) {
   setSelectedObservationCaseId(caseId)
 
   if (!caseId) {
-    setPsyGender('')
-    setPsyAge('')
-    setPsyChiefComplaint('')
-    setPsyLocation('')
-    return
-  }
+  setPsyGender('')
+  setPsyAge('')
+  setPsyChiefComplaint('')
+  setPsyLocation('')
+  setPsyAeSuffix('')
+  return
+}
 
   const selectedCase = cases.find(
     (item) => String(item.id) === String(caseId)
@@ -562,13 +669,20 @@ function handleSelectObservationCase(caseId) {
   )
 
   setPsyLocation('Observation Room')
+
+  setPsyAeSuffix(
+  selectedCase.ae_suffix || ''
+)
 }
+
 
 function resetPsyForm() {
   setSelectedObservationCaseId('')
   setPsyGender('')
   setPsyAge('')
-  setPsySurname('')
+  setPsyAeSuffix('')
+  setPsyAeScanMessage('')
+  setShowPsyAeScanner(false)
   setPsyChiefComplaint('')
   setPsyLocation('')
 }
@@ -590,17 +704,30 @@ async function handleAddPsyCase() {
       )
     : null
 
-  if (
+  const normalizedPsyAeSuffix =
+  psyAeSuffix.trim().toUpperCase()
+
+if (
   !psyGender ||
   !psyAge ||
-  (!selectedObservationCase && !psyChiefComplaint.trim()) ||
-  (!selectedObservationCase && !psyLocation.trim()) ||
-  (!selectedObservationCase && !psySurname.trim())
+  (!selectedObservationCase &&
+    !psyChiefComplaint.trim()) ||
+  (!selectedObservationCase &&
+    !psyLocation.trim()) ||
+  !normalizedPsyAeSuffix
 ) {
   alert(
-    selectedObservationCase
-      ? 'Please complete Gender and Age'
-      : 'Please complete Surname, Gender, Age, Chief Complaint and Location'
+  selectedObservationCase
+    ? 'Please complete Gender, Age and AE reference'
+    : 'Please scan the AE barcode and complete Gender, Age, Chief Complaint and Location'
+)
+if (
+  !/^[A-Z0-9]{5}$/.test(
+    normalizedPsyAeSuffix
+  )
+) {
+  alert(
+    'AE reference must contain exactly 5 letters or numbers'
   )
   return
 }
@@ -615,9 +742,11 @@ async function handleAddPsyCase() {
 bed_no:
   selectedObservationCase?.bed_no || null,
 
-        patient_label: psySurname.trim()
-  ? psySurname.trim().toUpperCase()
-  : null,
+        ae_suffix:
+  normalizedPsyAeSuffix,
+
+patient_label:
+  `AE•••••${normalizedPsyAeSuffix}`,
 
         gender: psyGender,
         age: psyAge,
@@ -2160,18 +2289,68 @@ const linkedPsyCase = getLinkedPsyCase(item)
     )}
   </div>
 
-  {/* Surname */}
-  <div>
+  {/* AE Reference */}
+<div>
   <label className="block font-bold mb-2 text-gray-700">
-    Surname
+    AE Reference
   </label>
 
-  <input
-    value={psySurname}
-    onChange={(e) => setPsySurname(e.target.value)}
-    placeholder="e.g. Chan / Lee / Wong"
-    className="w-full border border-gray-300 rounded-2xl px-4 py-3 outline-none focus:ring-2 focus:ring-[#0078AE]"
-  />
+  {selectedObservationCaseId ? (
+    <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-4">
+      <p className="text-sm font-semibold text-[#0078AE]">
+        Linked AE reference
+      </p>
+
+      <p className="mt-1 text-xl font-bold tracking-wider text-gray-900">
+        {psyAeSuffix
+          ? `AE•••••${psyAeSuffix}`
+          : 'No AE reference found'}
+      </p>
+    </div>
+  ) : psyAeSuffix ? (
+    <div className="rounded-2xl border border-green-200 bg-green-50 p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-semibold text-green-700">
+            AE barcode scanned
+          </p>
+
+          <p className="mt-1 text-xl font-bold tracking-wider text-gray-900">
+            AE•••••{psyAeSuffix}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setPsyAeSuffix('')
+            setPsyAeScanMessage('')
+            setShowPsyAeScanner(true)
+          }}
+          className="rounded-xl bg-white px-3 py-2 text-sm font-bold text-[#0078AE] shadow-sm"
+        >
+          Scan Again
+        </button>
+      </div>
+    </div>
+  ) : (
+    <button
+      type="button"
+      onClick={() => {
+        setPsyAeScanMessage('')
+        setShowPsyAeScanner(true)
+      }}
+      className="w-full rounded-2xl border-2 border-[#0078AE] bg-white px-4 py-4 font-bold text-[#0078AE] hover:bg-blue-50"
+    >
+      Scan AE Barcode
+    </button>
+  )}
+
+  {!selectedObservationCaseId && (
+    <p className="mt-2 text-sm text-gray-500">
+      Only the last 5 characters of the AE number are retained.
+    </p>
+  )}
 </div>
 
         {/* Gender */}
@@ -2291,6 +2470,58 @@ const linkedPsyCase = getLinkedPsyCase(item)
     </div>
   </div>
 )}
+
+{showPsyAeScanner && (
+  <div className="fixed inset-0 z-[350] flex items-center justify-center bg-black/70 p-4">
+    <div className="w-full max-w-[560px] rounded-3xl bg-white p-5 shadow-2xl md:p-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">
+            Scan AE Barcode
+          </h2>
+
+          <p className="mt-1 text-sm text-gray-500">
+            Point the rear camera at the patient's AE barcode
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setShowPsyAeScanner(false)
+          }}
+          className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-2xl font-bold text-gray-600"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="mt-5 overflow-hidden rounded-2xl bg-black">
+        <div
+          id="psy-ae-reader"
+          className="min-h-[320px] w-full"
+        />
+      </div>
+
+      {psyAeScanMessage && (
+        <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600">
+          {psyAeScanMessage}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => {
+          setShowPsyAeScanner(false)
+        }}
+        className="mt-5 w-full rounded-2xl bg-gray-100 px-4 py-4 font-bold text-gray-700"
+      >
+        Cancel
+      </button>
+    </div>
+  </div>
+)}
+
 {psyEditModal && (
   <div
     className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]"
