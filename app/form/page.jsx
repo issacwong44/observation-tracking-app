@@ -26,7 +26,7 @@ const [diagnosis, setDiagnosis] = useState('')
 
 const [successModal, setSuccessModal] = useState(false)
 
-const [patientSurname, setPatientSurname] = useState('')
+const [aeSuffix, setAeSuffix] = useState('')
 
 const diagnosisOptions = [
   'Chest pain',
@@ -75,29 +75,39 @@ useEffect(() => {
 }, [])
 
 useEffect(() => {
-  const storedSurname =
+  const storedAeSuffix =
     sessionStorage.getItem(
-      'observation_patient_surname'
+      'observation_ae_suffix'
     )
 
-  if (!storedSurname) return
+  if (!storedAeSuffix) return
 
-  setPatientSurname(storedSurname)
+  setAeSuffix(
+    storedAeSuffix.trim().toUpperCase()
+  )
 
   sessionStorage.removeItem(
-    'observation_patient_surname'
+    'observation_ae_suffix'
   )
 }, [])
 
 async function handleSubmit(e) {
   e.preventDefault()
 
-   if (!patientSurname.trim()) {
-    alert(
-      'Please scan the patient wristband or enter the surname'
-    )
-    return
-  }
+  const normalizedAeSuffix =
+  aeSuffix.trim().toUpperCase()
+
+if (!normalizedAeSuffix) {
+  alert('Please scan the AE barcode first')
+  return
+}
+
+if (!/^[A-Z0-9]{5}$/.test(normalizedAeSuffix)) {
+  alert(
+    'AE reference must contain exactly 5 letters or numbers'
+  )
+  return
+}
 
    const specialPadRoom = getSpecialPadRoom(bed)
   const submittedAt = new Date().toISOString()
@@ -114,6 +124,20 @@ async function handleSubmit(e) {
     return
   }
 
+  const { data: existingAe } = await supabase
+    .from('observation_cases')
+    .select('id, bed_no, ae_suffix')
+    .eq('ae_suffix', normalizedAeSuffix)
+    .is('confirmed_dc_at', null)
+    .maybeSingle()
+
+  if (existingAe) {
+    alert(
+      `This AE reference already exists at Bed ${existingAe.bed_no}`
+    )
+    return
+  }
+  
   const hasNursingHandover = handover.length > 0
 
 const { data: newCase, error } = await supabase
@@ -122,8 +146,8 @@ const { data: newCase, error } = await supabase
     {
   bed_no: bed,
 
-  patient_surname:
-    patientSurname.trim().toUpperCase() || null,
+  ae_suffix:
+  normalizedAeSuffix || null,
 
   gender: gender,
   age: age,
@@ -175,8 +199,9 @@ status: specialPadRoom
 
           bed_no: bed,
           patient_label:
-  patientSurname.trim().toUpperCase() ||
-  `Bed ${bed}`,
+  normalizedAeSuffix
+    ? `AE•••••${normalizedAeSuffix}`
+    : `Bed ${bed}`,
 
           gender: gender,
           age: age,
@@ -208,7 +233,7 @@ risk_type: psySpMissing.join(', '),
 
   setSuccessModal(true)
 
-setPatientSurname('')
+setAeSuffix('')
   setGender('')
 setAge('')
 setCategory('')
@@ -244,9 +269,9 @@ setRemarks('')
     Bed {bed}
   </p>
 
-  {patientSurname && (
+  {aeSuffix && (
   <p className="mt-1 text-sm md:text-base text-white/80">
-    {patientSurname}
+    AE•••••{aeSuffix}
   </p>
 )}
 </div>
@@ -260,21 +285,21 @@ setRemarks('')
         <div>
           <div>
   <label className="block font-bold mb-2">
-    Patient Surname
+    AE Reference
   </label>
 
   <input
     type="text"
-    value={patientSurname}
-    onChange={(e) =>
-      setPatientSurname(
-        e.target.value.toUpperCase()
-      )
-    }
-    placeholder="Scan wristband or enter surname"
-    className="w-full border p-3 rounded-xl uppercase"
+    value={aeSuffix}
+    readOnly
+    maxLength={5}
+    placeholder="Scan AE barcode from previous page"
+    className="w-full rounded-xl border bg-gray-100 p-3 uppercase tracking-widest text-gray-700"
   />
 
+  <p className="mt-2 text-sm text-gray-500">
+    Only the last 5 characters of the AE number are retained.
+  </p>
 </div>
           <label className="block font-bold mb-2">Gender</label>
           <div className="flex gap-3">

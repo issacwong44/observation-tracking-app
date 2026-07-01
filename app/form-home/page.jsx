@@ -17,8 +17,8 @@ export default function FormHomePage() {
   
   const [showScanner, setShowScanner] = useState(false)
 const [scanMessage, setScanMessage] = useState('')
-const [patientSurname, setPatientSurname] = useState('')
-const [wristbandScanned, setWristbandScanned] = useState(false)
+const [aeSuffix, setAeSuffix] = useState('')
+const [aeBarcodeScanned, setAeBarcodeScanned] = useState(false)
 
 
 
@@ -62,33 +62,33 @@ useEffect(() => {
         facingMode: 'environment',
       },
       {
-        fps: 5,
-        qrbox: {
-          width: 220,
-          height: 220,
-        },
-      },
+  fps: 8,
+  qrbox: {
+    width: 300,
+    height: 120,
+  },
+},
       async (decodedText) => {
         if (hasScanned) return
 
         hasScanned = true
 
-        const scannedSurname =
-          extractPatientSurname(decodedText)
+        const scannedAeSuffix =
+  extractAeSuffix(decodedText)
 
-        if (!scannedSurname) {
-          hasScanned = false
+if (!scannedAeSuffix) {
+  hasScanned = false
 
-          setScanMessage(
-            `Unable to recognise wristband format: ${decodedText}`
-          )
+  setScanMessage(
+    'Unable to recognise the AE barcode.'
+  )
 
-          return
-        }
+  return
+}
 
-        setPatientSurname(scannedSurname)
-        setWristbandScanned(true)
-        setScanMessage('')
+setAeSuffix(scannedAeSuffix)
+setAeBarcodeScanned(true)
+setScanMessage('')
 
         try {
           if (!isStopped && scanner) {
@@ -149,22 +149,29 @@ useEffect(() => {
     setIsLoading(false)
   }
 
-function extractPatientSurname(decodedText) {
+function extractAeSuffix(decodedText) {
   const value = String(decodedText || '')
-    .replace(/\r?\n/g, ' ')
-    .replace(/\s+/g, ' ')
     .trim()
     .toUpperCase()
+    .replace(/\s+/g, '')
 
-  const match = value.match(
-    /^WB\s+[A-Z]{1,2}\d{6}\(?[0-9A]\)?[A-Z0-9]([A-Z][A-Z' -]*),/
-  )
+  // 支援barcode內容中包含：
+  // AE123456789
+  // 只擷取AE開始、其後由英文字母或數字組成的內容
+  const match = value.match(/AE[A-Z0-9]+/)
 
   if (!match) {
     return null
   }
 
-  return match[1].trim()
+  const aeNumber = match[0]
+
+  // AE後至少需要有5個字元
+  if (aeNumber.length < 7) {
+    return null
+  }
+
+  return aeNumber.slice(-5)
 }
 
 
@@ -196,15 +203,15 @@ function extractPatientSurname(decodedText) {
   if (isOpening || isLoading) return
 
   const selectedBed = bedNo.trim()
-  const selectedSurname =
-    patientSurname.trim().toUpperCase()
+  const selectedAeSuffix =
+  aeSuffix.trim().toUpperCase()
 
-  if (!selectedSurname) {
-    setErrorMessage(
-      'Please scan the patient wristband first'
-    )
-    return
-  }
+if (!selectedAeSuffix) {
+  setErrorMessage(
+    'Please scan the AE barcode first'
+  )
+  return
+}
 
   const validationError =
     validateBedNumber(selectedBed)
@@ -218,9 +225,9 @@ function extractPatientSurname(decodedText) {
   setIsOpening(true)
 
   sessionStorage.setItem(
-    'observation_patient_surname',
-    selectedSurname
-  )
+  'observation_ae_suffix',
+  selectedAeSuffix
+)
 
   router.push(
     `/form?bed=${encodeURIComponent(selectedBed)}`
@@ -251,10 +258,10 @@ function extractPatientSurname(decodedText) {
 
             <div className="mb-7">
   <label className="block text-base font-bold text-gray-800 sm:text-lg md:text-xl">
-    Patient Wristband
-  </label>
+  AE Barcode
+</label>
 
-  {!wristbandScanned ? (
+  {!aeBarcodeScanned ? (
     <button
   type="button"
   onClick={() => {
@@ -264,29 +271,29 @@ function extractPatientSurname(decodedText) {
   disabled={isOpening}
   className="mt-3 w-full rounded-2xl border-2 border-[#0078AE] bg-white px-4 py-5 text-lg font-bold text-[#0078AE] transition hover:bg-blue-50 disabled:opacity-50"
 >
-  Scan Patient Wristband QR
+  Scan AE Barcode
 </button>
   ) : (
     <div className="mt-3 rounded-2xl border border-green-200 bg-green-50 p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-semibold text-green-700">
-            Wristband scanned
-          </p>
+  AE barcode scanned
+</p>
 
-          <p className="mt-2 text-xl font-bold text-gray-900">
-            {patientSurname}
-          </p>
+<p className="mt-2 text-xl font-bold tracking-wider text-gray-900">
+  AE•••••{aeSuffix}
+</p>
         </div>
 
         <button
   type="button"
   onClick={() => {
-    setPatientSurname('')
-    setWristbandScanned(false)
-    setScanMessage('')
-    setShowScanner(true)
-  }}
+  setAeSuffix('')
+  setAeBarcodeScanned(false)
+  setScanMessage('')
+  setShowScanner(true)
+}}
   className="rounded-xl bg-white px-3 py-2 text-sm font-bold text-[#0078AE] shadow-sm"
 >
   Scan Again
@@ -348,8 +355,8 @@ function extractPatientSurname(decodedText) {
                 type="button"
                 onClick={() => {
   setBedNo('')
-  setPatientSurname('')
-  setWristbandScanned(false)
+  setAeSuffix('')
+  setAeBarcodeScanned(false)
   setScanMessage('')
   setErrorMessage('')
 }}
@@ -398,11 +405,11 @@ function extractPatientSurname(decodedText) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">
-            Scan Patient Wristband
+            Scan AE Barcode
           </h2>
 
           <p className="mt-1 text-sm text-gray-500">
-            Point the rear camera at the wristband QR code
+            Point the rear camera at the patient's AE barcode
           </p>
         </div>
 
