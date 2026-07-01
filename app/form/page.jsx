@@ -25,6 +25,7 @@ const [warningModal, setWarningModal] = useState(null)
 const [diagnosis, setDiagnosis] = useState('')
 
 const [successModal, setSuccessModal] = useState(false)
+const [isSubmitting, setIsSubmitting] = useState(false)
 
 const [aeSuffix, setAeSuffix] = useState('')
 
@@ -94,11 +95,16 @@ useEffect(() => {
 async function handleSubmit(e) {
   e.preventDefault()
 
+  if (isSubmitting) return
+
+  setIsSubmitting(true)
+
   const normalizedAeSuffix =
-  aeSuffix.trim().toUpperCase()
+    aeSuffix.trim().toUpperCase()
 
 if (!normalizedAeSuffix) {
   alert('Please scan the AE barcode first')
+   setIsSubmitting(false)
   return
 }
 
@@ -106,6 +112,7 @@ if (!/^[A-Z0-9]{5}$/.test(normalizedAeSuffix)) {
   alert(
     'AE reference must contain exactly 5 letters or numbers'
   )
+   setIsSubmitting(false)
   return
 }
 
@@ -121,6 +128,7 @@ if (!/^[A-Z0-9]{5}$/.test(normalizedAeSuffix)) {
 
   if (existingBed) {
     setWarningModal(existingBed)
+    setIsSubmitting(false)
     return
   }
 
@@ -135,6 +143,7 @@ if (!/^[A-Z0-9]{5}$/.test(normalizedAeSuffix)) {
     alert(
       `This AE reference already exists at Bed ${existingAe.bed_no}`
     )
+    setIsSubmitting(false)
     return
   }
 
@@ -187,6 +196,7 @@ status: specialPadRoom
   if (error) {
     console.log(error)
     alert('Error saving data')
+    setIsSubmitting(false)
     return
   }
 
@@ -232,11 +242,13 @@ status: specialPadRoom
     if (psyError) {
       console.log(psyError)
       alert('Observation case submitted, but psychiatric handover was not created')
+      setIsSubmitting(false)
       return
     }
   }
 
   setSuccessModal(true)
+  setIsSubmitting(false)
 
 setAeSuffix('')
   setGender('')
@@ -552,11 +564,18 @@ setRemarks('')
 </div>
 
         <button
-          type="submit"
-          className="w-full bg-[#0078AE] hover:bg-[#00638F] text-white p-5 rounded-2xl font-bold text-xl"
-        >
-          Submit
-        </button>
+  type="submit"
+  disabled={isSubmitting}
+  className={`w-full p-5 rounded-2xl font-bold text-xl text-white transition ${
+    isSubmitting
+      ? 'bg-gray-400 cursor-not-allowed'
+      : 'bg-[#0078AE] hover:bg-[#00638F]'
+  }`}
+>
+  {isSubmitting
+    ? 'Submitting...'
+    : 'Submit'}
+</button>
 
       </form>
     </div>
