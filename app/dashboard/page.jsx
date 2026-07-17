@@ -5,6 +5,7 @@ import {
   ShieldAlert,
   ClipboardList,
   Brain,
+  ScanLine,
   Clock3,
   CircleHelp,
   Mars,
@@ -15,6 +16,68 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import BottomNav from '../components/BottomNav'
 
+
+const CT_STATUS = {
+  PENDING: 'pending_ct',
+  AWAIT_REPORT: 'await_report',
+  COMPLETED: 'completed'
+}
+
+function isCTTag(text) {
+  const normalized = String(text || '').trim().toUpperCase()
+  return normalized === 'CT' || normalized === 'CTB'
+}
+
+function normalizeCTStatus(status) {
+  if (status === CT_STATUS.AWAIT_REPORT) return CT_STATUS.AWAIT_REPORT
+  if (status === CT_STATUS.COMPLETED) return CT_STATUS.COMPLETED
+  return CT_STATUS.PENDING
+}
+
+function getCTStatusMeta(status) {
+  const normalized = normalizeCTStatus(status)
+
+  if (normalized === CT_STATUS.AWAIT_REPORT) {
+    return {
+      label: 'Await Report',
+      tagClass: 'bg-orange-50 text-orange-700',
+      badgeClass: 'bg-orange-100 text-orange-700',
+      borderClass: 'border-orange-200'
+    }
+  }
+
+  if (normalized === CT_STATUS.COMPLETED) {
+    return {
+      label: 'Report Reviewed',
+      tagClass: 'bg-green-100 text-green-700',
+      badgeClass: 'bg-green-200 text-green-800',
+      borderClass: 'border-green-200'
+    }
+  }
+
+  return {
+    label: 'Pending CT',
+    tagClass: 'bg-red-50 text-red-700',
+    badgeClass: 'bg-red-100 text-red-700',
+    borderClass: 'border-red-200'
+  }
+}
+
+function CTStatusBadge({ status, compact = false }) {
+  const meta = getCTStatusMeta(status)
+
+  return (
+    <span
+      className={`rounded-xl font-bold ${meta.badgeClass} ${
+        compact
+          ? 'px-2 py-0.5 text-[10px]'
+          : 'px-2.5 py-1 text-xs'
+      }`}
+    >
+      {meta.label}
+    </span>
+  )
+}
 
 export default function DashboardPage() {
   const [cases, setCases] = useState([])
@@ -32,6 +95,9 @@ const [dropQ1hModal, setDropQ1hModal] = useState(false)
 const [changeBedModal, setChangeBedModal] = useState(null)
 const [newBedNo, setNewBedNo] = useState('')
 const [changeBedError, setChangeBedError] = useState('')
+
+const [ctModal, setCtModal] = useState(null)
+const [ctUpdating, setCtUpdating] = useState(false)
 
 
 
@@ -123,6 +189,62 @@ function getAlertColor(minutes) {
   setModalTitle(title)
   setModalCases(list)
 }
+async function moveCTToAwaitReport() {
+  if (!ctModal || ctUpdating) return
+
+  setCtUpdating(true)
+
+  const now = new Date().toISOString()
+
+  const { error } = await supabase
+    .from('observation_cases')
+    .update({
+      ct_status: 'await_report',
+      ct_updated_at: now
+    })
+    .eq('id', ctModal.id)
+
+  if (error) {
+    console.error('Update CT status error:', error)
+    alert('Unable to update CT status')
+    setCtUpdating(false)
+    return
+  }
+
+  setCtModal(null)
+  setCtUpdating(false)
+
+  await fetchCases()
+}
+
+async function completeCTWorkflow() {
+  if (!ctModal || ctUpdating) return
+
+  setCtUpdating(true)
+
+  const now = new Date().toISOString()
+
+  const { error } = await supabase
+    .from('observation_cases')
+    .update({
+      ct_status: 'completed',
+      ct_updated_at: now
+    })
+    .eq('id', ctModal.id)
+
+  if (error) {
+    console.error('Complete CT workflow error:', error)
+    alert('Unable to complete CT workflow')
+    setCtUpdating(false)
+    return
+  }
+
+  setCtModal(null)
+  setCtUpdating(false)
+
+  await fetchCases()
+}
+
 async function handleAcknowledge(id) {
   const acknowledgedAt = new Date().toISOString()
 
@@ -370,12 +492,34 @@ const pendingVS = activeCases.filter(
   (item) => item.acknowledged_at && !item.vs_taken_at
 )
 
- const headInjury = activeCases.filter(
-  (item) => item.head_injury === true
+function hasCTHandover(item) {
+  const handoverTasks = String(
+    item.nursing_handover || ''
+  )
+    .split(',')
+    .map((task) => task.trim().toUpperCase())
+
+  return (
+    handoverTasks.includes('CT') ||
+    handoverTasks.includes('CTB')
+  )
+}
+
+const ctCases = activeCases.filter(
+  (item) =>
+    hasCTHandover(item) &&
+    item.ct_status !== 'completed'
 )
 
-const hiCases = activeCases.filter(
-  (item) => item.head_injury === true
+const pendingCTCases = ctCases.filter(
+  (item) =>
+    !item.ct_status ||
+    item.ct_status === 'pending_ct'
+)
+
+const awaitReportCases = ctCases.filter(
+  (item) =>
+    item.ct_status === 'await_report'
 )
 
 const q1hCases = activeCases.filter(
@@ -385,6 +529,12 @@ const q1hCases = activeCases.filter(
   const fallRisk = activeCases.filter(
     (item) => item.fall_risk === 'Yes'
   )
+const headInjuryCases = activeCases.filter(
+  (item) =>
+    item.head_injury === true ||
+    item.head_injury === 'Yes'
+)
+
 const psyMissingCases = activeCases.filter(
   (item) => item.missing_risk
 )
@@ -575,11 +725,9 @@ const filteredCases = sortedCases.filter((item) => {
 {/* Second row */}
 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
 
- <SmallCard
-  title="Fall Risk"
-  list={fallRisk}
-  icon={<ShieldAlert size={34} />}
-  color="#6C4AB6"
+<RiskWorkflowCard
+  fallRiskCases={fallRisk}
+  headInjuryCases={headInjuryCases}
   onViewAll={openCaseModal}
 />
 
@@ -599,12 +747,10 @@ const filteredCases = sortedCases.filter((item) => {
   onViewAll={openCaseModal}
 />
 
-<SmallCard
-  title="HI"
-  list={hiCases}
-  icon={<Brain size={34} />}
-  color="#C94B4B"
-  onViewAll={openCaseModal}
+<CTWorkflowCard
+  pendingCases={pendingCTCases}
+  awaitReportCases={awaitReportCases}
+  onCaseClick={setCtModal}
 />
 
 <SmallCard
@@ -613,8 +759,8 @@ const filteredCases = sortedCases.filter((item) => {
   icon={<Clock3 size={34} />}
   color="#245C8F"
   onViewAll={openCaseModal}
-  extraButton={
-    <div className="mt-3 flex gap-2">
+extraButton={
+  <div className="flex gap-2">
 
   <button
     onClick={() => setQ1hModal(true)}
@@ -845,39 +991,33 @@ const filteredCases = sortedCases.filter((item) => {
     ?.split(',')
     .map((handover, index) => {
       const text = handover.trim()
-
-      const done =
-        item.handover_done?.[text]
+      const isCT = isCTTag(text)
+      const done = !isCT && item.handover_done?.[text]
+      const ctMeta = getCTStatusMeta(item.ct_status)
 
       return (
         <div
-  key={index}
-  className={`flex items-center gap-1 px-4 py-2 rounded-2xl font-bold ${
-    done
-      ? 'bg-green-100 text-green-700'
-      : 'bg-[#F3EBCF] text-[#9A6E00]'
-  }`}
->
-  <span>{text}</span>
+          key={index}
+          className={`flex items-center gap-2 px-4 py-2 rounded-2xl font-bold ${
+            isCT
+              ? ctMeta.tagClass
+              : done
+                ? 'bg-green-100 text-green-700'
+                : 'bg-[#F3EBCF] text-[#9A6E00]'
+          }`}
+        >
+          <span>{text}</span>
 
-  {done && (
-    <span className="text-green-600">
-      ✓
-    </span>
-  )}
+          {done && (
+            <span className="text-green-600">
+              ✓
+            </span>
+          )}
 
-  {text === 'CTB' && done && !item.handover_done?.CTB_report_reviewed && (
-    <span className="ml-1 bg-orange-100 text-orange-700 px-2 py-0.5 rounded-xl text-xs font-bold">
-      Await report
-    </span>
-  )}
-
-  {text === 'CTB' && item.handover_done?.CTB_report_reviewed && (
-    <span className="ml-1 bg-blue-100 text-[#0078AE] px-2 py-0.5 rounded-xl text-xs font-bold">
-      Report reviewed
-    </span>
-  )}
-</div>
+          {isCT && (
+            <CTStatusBadge status={item.ct_status} />
+          )}
+        </div>
       )
     })}
 </div>
@@ -1315,67 +1455,159 @@ const filteredCases = sortedCases.filter((item) => {
         .split(',')
         .map((item, index) => {
           const text = item.trim()
-          const isCTB = text === 'CTB'
+          const isCT =
+  text.toUpperCase() === 'CT' ||
+  text.toUpperCase() === 'CTB'
 
           if (!text) return null
 
-          return (
-            <div key={index} className="space-y-2">
-              <label className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  checked={handoverChecks[text] || false}
-                  onChange={(e) => {
-                    const checked = e.target.checked
+return (
+  <div key={index} className="space-y-3">
+    {isCT ? (
+      <div className="rounded-2xl border border-gray-200 bg-gray-50 p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="font-bold text-gray-900">
+              CT Status
+            </p>
 
-                    setHandoverChecks((prev) => ({
-                      ...prev,
-                      [text]: checked,
+            <p className="mt-1 text-sm text-gray-500">
+              Select current CT status
+            </p>
+          </div>
 
-                      ...(isCTB && !checked
-                        ? { CTB_report_reviewed: false }
-                        : {})
-                    }))
-                  }}
-                />
+          <CTStatusBadge status={detailModal.ct_status} />
+        </div>
 
-                <span>{text}</span>
-              </label>
+        <div className="mt-4 space-y-3">
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-4 py-3">
+            <input
+              type="radio"
+              name="ct-status"
+              value="pending_ct"
+              checked={
+                !detailModal.ct_status ||
+                detailModal.ct_status === 'pending_ct'
+              }
+              onChange={() => {
+                setDetailModal((prev) => ({
+                  ...prev,
+                  ct_status: 'pending_ct'
+                }))
+              }}
+            />
 
-              {isCTB && handoverChecks.CTB && (
-                <label className="ml-8 flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={handoverChecks.CTB_report_reviewed || false}
-                    onChange={(e) => {
-                      setHandoverChecks((prev) => ({
-                        ...prev,
-                        CTB_report_reviewed: e.target.checked
-                      }))
-                    }}
-                  />
+            <span className="font-semibold text-gray-800">
+              Pending CT
+            </span>
+          </label>
 
-                  <span className="font-semibold text-gray-700">
-                    Report reviewed
-                  </span>
-                </label>
-              )}
-            </div>
-          )
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-4 py-3">
+            <input
+              type="radio"
+              name="ct-status"
+              value="await_report"
+              checked={
+                detailModal.ct_status === 'await_report'
+              }
+              onChange={() => {
+                setDetailModal((prev) => ({
+                  ...prev,
+                  ct_status: 'await_report'
+                }))
+              }}
+            />
+
+            <span className="font-semibold text-gray-800">
+              Await Report
+            </span>
+          </label>
+
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl bg-white px-4 py-3">
+            <input
+              type="radio"
+              name="ct-status"
+              value="completed"
+              checked={
+                detailModal.ct_status === 'completed'
+              }
+              onChange={() => {
+                setDetailModal((prev) => ({
+                  ...prev,
+                  ct_status: 'completed'
+                }))
+              }}
+            />
+
+            <span className="font-semibold text-gray-800">
+              Report Reviewed — Completed
+            </span>
+          </label>
+        </div>
+      </div>
+    ) : (
+      <label className="flex items-center gap-3">
+        <input
+          type="checkbox"
+          checked={handoverChecks[text] || false}
+          onChange={(event) => {
+            setHandoverChecks((prev) => ({
+              ...prev,
+              [text]: event.target.checked
+            }))
+          }}
+        />
+
+        <span>{text}</span>
+      </label>
+    )}
+  </div>
+)
         })}
 
       <button
-        onClick={async () => {
-          await supabase
-            .from('observation_cases')
-            .update({
-              handover_done: handoverChecks
-            })
-            .eq('id', detailModal.id)
+onClick={async () => {
+  const now = new Date().toISOString()
 
-          setDetailModal(null)
-          fetchCases()
-        }}
+  const handoverItems = String(
+    detailModal.nursing_handover || ''
+  )
+    .split(',')
+    .map((item) => item.trim().toUpperCase())
+
+  const hasCT =
+    handoverItems.includes('CT') ||
+    handoverItems.includes('CTB')
+
+  const updatePayload = {
+    handover_done: handoverChecks
+  }
+
+  if (hasCT) {
+    updatePayload.ct_status =
+      detailModal.ct_status || 'pending_ct'
+
+    updatePayload.ct_updated_at = now
+  }
+
+  const { error } = await supabase
+    .from('observation_cases')
+    .update(updatePayload)
+    .eq('id', detailModal.id)
+
+  if (error) {
+    console.error(
+      'Save checklist and CT status error:',
+      error
+    )
+
+    alert('Unable to save changes')
+    return
+  }
+
+  setDetailModal(null)
+  await fetchCases()
+}}
         className="w-full mt-6 bg-[#0078AE] text-white py-3 rounded-2xl font-bold hover:bg-[#00638F]"
       >
         Save Checklist
@@ -1478,6 +1710,152 @@ const filteredCases = sortedCases.filter((item) => {
   </div>
 )}
 
+{ctModal && (
+  <div
+    className="
+      fixed inset-0 z-[100]
+      flex items-center justify-center
+      bg-black/40 p-4
+    "
+    onClick={() => setCtModal(null)}
+  >
+    <div
+      className="
+        w-full max-w-md
+        rounded-3xl bg-white
+        p-6 shadow-2xl
+      "
+      onClick={(event) => event.stopPropagation()}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold tracking-wider text-gray-400">
+            CT STATUS
+          </p>
+
+          <h2 className="mt-1 text-3xl font-bold text-[#0078AE]">
+            Bed {ctModal.bed_no}
+          </h2>
+
+          {ctModal.ae_suffix && (
+            <p className="mt-1 text-sm text-gray-500">
+              AE•••••{ctModal.ae_suffix}
+            </p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setCtModal(null)}
+          className="
+            flex h-10 w-10
+            items-center justify-center
+            rounded-xl bg-gray-100
+            font-bold text-gray-500
+          "
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Current Status */}
+      <div className="mt-6 rounded-2xl bg-gray-50 p-4">
+        <p className="text-xs font-bold uppercase text-gray-400">
+          Current status
+        </p>
+
+        <div className="mt-2">
+          <CTStatusBadge status={ctModal.ct_status} />
+        </div>
+      </div>
+
+      {/* Patient information */}
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl border border-gray-200 p-4">
+          <p className="text-xs font-bold text-gray-400">
+            Category
+          </p>
+
+          <p className="mt-1 font-bold text-gray-900">
+            {ctModal.category
+              ? `CAT ${ctModal.category}`
+              : '-'}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-gray-200 p-4">
+          <p className="text-xs font-bold text-gray-400">
+            Handover
+          </p>
+
+          <p className="mt-1 truncate font-bold text-gray-900">
+            {ctModal.nursing_handover || '-'}
+          </p>
+        </div>
+      </div>
+
+      {/* 暫時未有功能嘅 status button */}
+      <div className="mt-6">
+        {ctModal.ct_status === 'await_report' ? (
+          <button
+  type="button"
+  disabled={ctUpdating}
+  onClick={completeCTWorkflow}
+  className="
+    w-full rounded-2xl
+    bg-green-600 px-5 py-4
+    font-bold text-white
+    transition
+    hover:bg-green-700
+    active:scale-[0.99]
+    disabled:cursor-not-allowed
+    disabled:opacity-50
+  "
+>
+  {ctUpdating
+    ? 'Updating...'
+    : 'Report Reviewed — Complete'}
+</button>
+        ) : (
+<button
+  type="button"
+  disabled={ctUpdating}
+  onClick={moveCTToAwaitReport}
+  className="
+    w-full rounded-2xl
+    bg-[#C94B4B] px-5 py-4
+    font-bold text-white
+    transition
+    hover:bg-[#B53F3F]
+    active:scale-[0.99]
+    disabled:cursor-not-allowed
+    disabled:opacity-50
+  "
+>
+  {ctUpdating
+    ? 'Updating...'
+    : 'CT Completed — Await Report'}
+</button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setCtModal(null)}
+          className="
+            mt-3 w-full rounded-2xl
+            border border-gray-300
+            px-5 py-4
+            font-bold text-gray-600
+          "
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
 <BottomNav />
 
     </div>
@@ -1533,11 +1911,232 @@ function BedBlock({
     </div>
   )
 }
+function RiskWorkflowCard({
+  fallRiskCases,
+  headInjuryCases,
+  onViewAll
+}) {
+  const fallRiskPreview =
+    fallRiskCases.slice(0, 6)
+
+  const headInjuryPreview =
+    headInjuryCases.slice(0, 6)
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow">
+      {/* Fall Risk */}
+      <div className="p-6">
+        <div className="flex items-center gap-5">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-50 text-[#6C4AB6]">
+            <ShieldAlert size={34} />
+          </div>
+
+          <div>
+            <p className="text-lg font-bold text-gray-900">
+              Fall Risk
+            </p>
+
+            <p className="mt-1 text-4xl font-bold text-[#6C4AB6]">
+              {fallRiskCases.length}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {fallRiskPreview.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-xl bg-purple-50 px-3 py-2 text-sm font-bold text-[#6C4AB6]"
+            >
+              {item.bed_no}
+            </div>
+          ))}
+
+          {fallRiskCases.length === 0 && (
+            <p className="text-sm text-gray-400">
+              No fall risk
+            </p>
+          )}
+        </div>
+
+        {fallRiskCases.length > 6 && (
+          <button
+            type="button"
+            onClick={() =>
+              onViewAll(
+                'Fall Risk',
+                fallRiskCases
+              )
+            }
+            className="mt-3 text-sm font-bold text-[#6C4AB6]"
+          >
+            View All ›
+          </button>
+        )}
+      </div>
+
+      <div className="border-t border-gray-200" />
+
+      {/* Head Injury */}
+      <div className="p-6">
+        <div className="flex items-center gap-5">
+<div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-50 text-[#C97916]">
+  <Brain size={34} />
+</div>
+
+          <div>
+            <p className="text-lg font-bold text-gray-900">
+              Head Injury
+            </p>
+
+<p className="mt-1 text-4xl font-bold text-[#C97916]">
+  {headInjuryCases.length}
+</p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {headInjuryPreview.map((item) => (
+            <div
+              key={item.id}
+              className="rounded-xl bg-orange-50 px-3 py-2 text-sm font-bold text-[#C97916]"
+            >
+              {item.bed_no}
+            </div>
+          ))}
+
+        </div>
+
+        {headInjuryCases.length > 6 && (
+          <button
+            type="button"
+            onClick={() =>
+              onViewAll(
+                'Head Injury',
+                headInjuryCases
+              )
+            }
+            className="mt-3 text-sm font-bold text-[#C97916]"
+          >
+            View All ›
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CTWorkflowCard({
+  pendingCases,
+  awaitReportCases,
+  onCaseClick
+}) {
+  return (
+    <div className="overflow-hidden rounded-3xl bg-white shadow">
+      {/* Card Header */}
+      <div className="flex items-center gap-4 px-5 pt-5 pb-4">
+        <div
+          className="
+            flex h-14 w-14
+            items-center justify-center
+            rounded-2xl
+          "
+          style={{
+            backgroundColor: '#FDECEC',
+            color: '#C94B4B'
+          }}
+        >
+          <ScanLine size={34} />
+        </div>
+
+        <div>
+          <p className="text-xl font-bold text-gray-900">
+            CT
+          </p>
+
+        </div>
+      </div>
+
+      {/* Pending CT */}
+      <div className="px-5 py-4">
+        <div className="flex items-center justify-between">
+          <p className="font-bold text-gray-800">
+            Pending CT
+          </p>
+
+          <p className="text-2xl font-bold text-[#C94B4B]">
+            {pendingCases.length}
+          </p>
+        </div>
+
+        <div className="mt-3 flex min-h-[40px] flex-wrap gap-2">
+         {pendingCases.slice(0, 6).map((item) => (
+  <button
+    key={item.id}
+    type="button"
+    onClick={() => onCaseClick(item)}
+    className="
+      rounded-xl
+      bg-red-50
+      px-3 py-2
+      text-sm font-bold
+      text-[#C94B4B]
+      transition
+      hover:bg-red-100
+      active:scale-95
+    "
+  >
+    Bed {item.bed_no}
+  </button>
+))}
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-gray-200" />
+
+      {/* Await Report */}
+      <div className="px-5 py-4">
+        <div className="flex items-center justify-between">
+          <p className="font-bold text-gray-800">
+            Await Report
+          </p>
+
+          <p className="text-2xl font-bold text-[#D58A20]">
+            {awaitReportCases.length}
+          </p>
+        </div>
+
+        <div className="mt-3 flex min-h-[40px] flex-wrap gap-2">
+         {awaitReportCases.slice(0, 6).map((item) => (
+  <button
+    key={item.id}
+    type="button"
+    onClick={() => onCaseClick(item)}
+    className="
+      rounded-xl
+      bg-orange-50
+      px-3 py-2
+      text-sm font-bold
+      text-[#D58A20]
+      transition
+      hover:bg-orange-100
+      active:scale-95
+    "
+  >
+    Bed {item.bed_no}
+  </button>
+))}
+        </div>
+      </div>
+    </div>
+  )
+}
 function SmallCard({ title, list, icon, color, onViewAll, extraButton }) {
   const preview = list.slice(0, 6)
 
   return (
-    <div className="relative bg-white rounded-3xl p-6 shadow border border-gray-100">
+    <div className="relative bg-white rounded-3xl p-6 pb-24 shadow border border-gray-100">
       <div className="flex items-center gap-5">
         <div
           className="w-16 h-16 rounded-2xl flex items-center justify-center"
@@ -1611,8 +2210,8 @@ function SmallCard({ title, list, icon, color, onViewAll, extraButton }) {
           View All ›
         </button>
       )}
-   {extraButton && (
-  <div className="mt-4 flex justify-end">
+{extraButton && (
+  <div className="absolute bottom-6 right-6">
     {extraButton}
   </div>
 )}
@@ -1690,15 +2289,19 @@ function BedCaseCard({
   ?.split(',')
   .map((tag, index) => {
     const text = tag.trim()
-    const done = item.handover_done?.[text]
+    const isCT = isCTTag(text)
+    const done = !isCT && item.handover_done?.[text]
+    const ctMeta = getCTStatusMeta(item.ct_status)
 
     return (
       <span
         key={index}
-        className={`px-2 py-1 rounded-xl text-xs font-semibold flex items-center gap-1 ${
-          done
-            ? 'bg-green-100 text-green-700'
-            : 'bg-yellow-100 text-yellow-700'
+        className={`px-2 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 ${
+          isCT
+            ? ctMeta.tagClass
+            : done
+              ? 'bg-green-100 text-green-700'
+              : 'bg-yellow-100 text-yellow-700'
         }`}
       >
         {text}
@@ -1709,16 +2312,8 @@ function BedCaseCard({
           </span>
         )}
 
-        {text === 'CTB' && done && !item.handover_done?.CTB_report_reviewed && (
-          <span className="ml-1 bg-orange-100 text-orange-700 px-2 py-0.5 rounded-xl text-[10px] font-bold">
-            Await report
-          </span>
-        )}
-
-        {text === 'CTB' && item.handover_done?.CTB_report_reviewed && (
-          <span className="ml-1 bg-blue-100 text-[#0078AE] px-2 py-0.5 rounded-xl text-[10px] font-bold">
-            Report reviewed
-          </span>
+        {isCT && (
+          <CTStatusBadge status={item.ct_status} compact />
         )}
       </span>
     )

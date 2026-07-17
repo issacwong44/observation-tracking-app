@@ -24,6 +24,8 @@ const [remarks, setRemarks] = useState('')
 const [warningModal, setWarningModal] = useState(null)
 const [diagnosis, setDiagnosis] = useState('')
 
+const [ctRequired, setCtRequired] = useState('No')
+
 const [successModal, setSuccessModal] = useState(false)
 const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -102,7 +104,12 @@ async function handleSubmit(e) {
   const normalizedAeSuffix =
     aeSuffix.trim().toUpperCase()
 
-if (!normalizedAeSuffix) {
+if (!ctRequired) {
+  alert('Please select CT Yes or No')
+  setIsSubmitting(false)
+  return
+}
+    if (!normalizedAeSuffix) {
   alert('Please scan the AE barcode first')
    setIsSubmitting(false)
   return
@@ -147,8 +154,23 @@ if (!/^[A-Z0-9]{5}$/.test(normalizedAeSuffix)) {
     return
   }
 
-  const hasNursingHandover = handover.length > 0
+const handoverWithoutCT = handover.filter(
+  (item) =>
+    item !== 'CT' &&
+    item !== 'CTB'
+)
 
+const finalHandover =
+  ctRequired === 'Yes'
+    ? ['CT', ...handoverWithoutCT]
+    : handoverWithoutCT
+
+const hasNursingHandover =
+  finalHandover.length > 0
+
+const hasCT =
+  ctRequired === 'Yes'
+  
 const { data: newCase, error } = await supabase
   .from('observation_cases')
   .insert([
@@ -169,11 +191,19 @@ const { data: newCase, error } = await supabase
       head_injury: headInjury,
       q1h_monitoring: q1h,
 
-      nursing_handover: handover.join(', '),
+      nursing_handover: finalHandover.join(', '),
 
-      remarks: remarks,
+ct_status: hasCT
+  ? 'pending_ct'
+  : null,
 
-      acknowledged_at: specialPadRoom
+ct_updated_at: hasCT
+  ? submittedAt
+  : null,
+
+remarks: remarks,
+
+acknowledged_at: specialPadRoom
   ? submittedAt
   : null,
 
@@ -259,6 +289,7 @@ setFallRisk('No')
 setPsySpMissing([])
 setHeadInjury('No')
 setQ1h('No')
+setCtRequired('No')
 setHandover([])
 setRemarks('')
 }
@@ -454,7 +485,7 @@ setRemarks('')
         </div>
 
         <div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
 
             <div>
               <label className="block font-bold mb-2">Fall Risk</label>
@@ -516,6 +547,29 @@ setRemarks('')
               </div>
             </div>
 
+            <div>
+  <label className="block font-bold mb-3">
+    CT
+  </label>
+
+  <div className="grid grid-cols-2 gap-3">
+    {['Yes', 'No'].map((value) => (
+      <button
+        key={value}
+        type="button"
+        onClick={() => setCtRequired(value)}
+className={`w-full px-4 md:px-6 py-3 md:py-4 rounded-2xl text-lg md:text-xl border-2 transition ${
+  ctRequired === value
+    ? 'border-black bg-gray-200 text-black'
+    : 'border-transparent bg-gray-200 text-gray-700'
+}`}
+      >
+        {value}
+      </button>
+    ))}
+  </div>
+</div>
+
           </div>
         </div>
 
@@ -523,7 +577,7 @@ setRemarks('')
   <label className="block font-bold mb-2">Nursing Handover</label>
 
   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-    {['CTB', 'Urine', 'Hstix', 'IVF', 'AOM','Cardiac Mon', 'Restraint', 'Tracking tag', 'Others'].map((item) => (
+    {['Urine', 'Hstix', 'IVF', 'AOM','Cardiac Mon', 'Restraint', 'Tracking tag', 'Others'].map((item) => (
   <button
     key={item}
     type="button"

@@ -6,6 +6,69 @@ import { supabase } from '@/lib/supabase'
 import { Bell, Mars, Venus } from 'lucide-react'
 import BottomNav from '../components/BottomNav'
 
+
+const CT_STATUS = {
+  PENDING: 'pending_ct',
+  AWAIT_REPORT: 'await_report',
+  COMPLETED: 'completed'
+}
+
+function isCTTag(text) {
+  const normalized = String(text || '').trim().toUpperCase()
+  return normalized === 'CT' || normalized === 'CTB'
+}
+
+function normalizeCTStatus(status) {
+  if (status === CT_STATUS.AWAIT_REPORT) return CT_STATUS.AWAIT_REPORT
+  if (status === CT_STATUS.COMPLETED) return CT_STATUS.COMPLETED
+  return CT_STATUS.PENDING
+}
+
+function getCTStatusMeta(status) {
+  const normalized = normalizeCTStatus(status)
+
+  if (normalized === CT_STATUS.AWAIT_REPORT) {
+    return {
+      label: 'Await Report',
+      tagClass: 'bg-orange-50 text-orange-700',
+      badgeClass: 'bg-orange-100 text-orange-700',
+      borderClass: 'border-orange-200'
+    }
+  }
+
+  if (normalized === CT_STATUS.COMPLETED) {
+    return {
+      label: 'Report Reviewed',
+      tagClass: 'bg-green-100 text-green-700',
+      badgeClass: 'bg-green-200 text-green-800',
+      borderClass: 'border-green-200'
+    }
+  }
+
+  return {
+    label: 'Pending CT',
+    tagClass: 'bg-red-50 text-red-700',
+    badgeClass: 'bg-red-100 text-red-700',
+    borderClass: 'border-red-200'
+  }
+}
+
+function CTStatusBadge({ status, compact = false }) {
+  const meta = getCTStatusMeta(status)
+
+  return (
+    <span
+      className={`rounded-xl font-bold ${meta.badgeClass} ${
+        compact
+          ? 'px-2 py-0.5 text-[10px]'
+          : 'px-2.5 py-1 text-xs'
+      }`}
+    >
+      {meta.label}
+    </span>
+  )
+}
+
 export default function HandoverPage({
   initialTab = 'observation'
 }) {
@@ -1269,7 +1332,11 @@ const hasHandover = handoverTags.length > 0
 
 const allHandoverDone =
   hasHandover &&
-  handoverTags.every((tag) => item.handover_done?.[tag])
+  handoverTags.every((tag) =>
+    isCTTag(tag)
+      ? normalizeCTStatus(item.ct_status) === CT_STATUS.COMPLETED
+      : item.handover_done?.[tag] === true
+  )
 
 const linkedPsyCase = getLinkedPsyCase(item)
     
@@ -1279,7 +1346,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
   <div
     key={item.id}
     onClick={() => openObservationDetail(item)}
-   className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b-4 border-gray-300 cursor-pointer hover:bg-gray-50 transition"
+   className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b-[16px] border-gray-200 cursor-pointer hover:bg-gray-50 transition"
   > 
                   {/* Bed card */}
                   <div className="p-4 md:p-5 md:border-r border-gray-100">
@@ -1410,41 +1477,37 @@ const linkedPsyCase = getLinkedPsyCase(item)
         .split(',')
         .map((tag, index) => {
           const text = tag.trim()
-          const done = item.handover_done?.[text]
+          const isCT = isCTTag(text)
+          const done = !isCT && item.handover_done?.[text]
+          const ctMeta = getCTStatusMeta(item.ct_status)
 
           return (
             <button
-  key={index}
-  onClick={(e) => {
-  e.stopPropagation()
-  openObservationDetail(item)
-}}
-  className={`px-4 md:px-5 py-2 rounded-2xl text-sm md:text-lg font-bold flex items-center gap-2 ${
-    done
-      ? 'bg-green-100 text-green-700'
-      : 'bg-yellow-100 text-yellow-700'
-  }`}
->
-  <span>{text}</span>
+              key={index}
+              onClick={(e) => {
+                e.stopPropagation()
+                openObservationDetail(item)
+              }}
+              className={`px-4 md:px-5 py-2 rounded-2xl text-sm md:text-lg font-bold flex items-center gap-2 ${
+                isCT
+                  ? ctMeta.tagClass
+                  : done
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-yellow-100 text-yellow-700'
+              }`}
+            >
+              <span>{text}</span>
 
-  {done && (
-    <span className="text-green-600 text-xl">
-      ✓
-    </span>
-  )}
+              {done && (
+                <span className="text-green-600 text-xl">
+                  ✓
+                </span>
+              )}
 
-  {text === 'CTB' && done && !item.handover_done?.CTB_report_reviewed && (
-    <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded-xl text-xs font-bold">
-      Await report
-    </span>
-  )}
-
-  {text === 'CTB' && item.handover_done?.CTB_report_reviewed && (
-    <span className="bg-blue-100 text-[#0078AE] px-2 py-0.5 rounded-xl text-xs font-bold">
-      Report reviewed
-    </span>
-  )}
-</button>
+              {isCT && (
+                <CTStatusBadge status={item.ct_status} />
+              )}
+            </button>
           )
         })}
     </div>
@@ -1683,7 +1746,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
       <div
   key={item.id}
   onClick={() => openPsyEditModal(item)}
-  className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b-4 border-gray-300 hover:bg-gray-50 transition cursor-pointer bg-white"
+  className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b-[16px] border-gray-200 hover:bg-gray-50 transition cursor-pointer bg-white"
 >
         {/* Case Card */}
         <div className="p-4 md:p-5 md:border-r border-gray-100 bg-gray-50 md:bg-white">
@@ -2060,9 +2123,87 @@ const linkedPsyCase = getLinkedPsyCase(item)
           .split(',')
           .map((tag, index) => {
             const text = tag.trim()
-            const isCTB = text === 'CTB'
+            const isCT = isCTTag(text)
 
             if (!text) return null
+
+            if (isCT) {
+              const ctMeta = getCTStatusMeta(detailModal.ct_status)
+
+              return (
+                <div
+                  key={index}
+                  className={`rounded-2xl border bg-gray-50 p-4 ${ctMeta.borderClass}`}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="font-bold text-gray-900">
+                        CT Status
+                      </p>
+
+                      <p className="mt-1 text-sm text-gray-500">
+                        Select current CT status
+                      </p>
+                    </div>
+
+                    <CTStatusBadge status={detailModal.ct_status} />
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {[
+                      {
+                        value: CT_STATUS.PENDING,
+                        label: 'Pending CT'
+                      },
+                      {
+                        value: CT_STATUS.AWAIT_REPORT,
+                        label: 'Await Report'
+                      },
+                      {
+                        value: CT_STATUS.COMPLETED,
+                        label: 'Report Reviewed'
+                      }
+                    ].map((option) => {
+                      const selected =
+                        normalizeCTStatus(detailModal.ct_status) ===
+                        option.value
+
+                      const optionMeta =
+                        getCTStatusMeta(option.value)
+
+                      return (
+                        <label
+                          key={option.value}
+                          className={`flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition ${
+                            selected
+                              ? `${optionMeta.tagClass} ${optionMeta.borderClass}`
+                              : 'border-gray-200 bg-white text-gray-700'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`ct-status-${detailModal.id}`}
+                            value={option.value}
+                            checked={selected}
+                            onChange={() => {
+                              setDetailModal((prev) => ({
+                                ...prev,
+                                ct_status: option.value
+                              }))
+                            }}
+                            className="h-5 w-5"
+                          />
+
+                          <span className="font-semibold">
+                            {option.label}
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            }
 
             return (
               <div key={index} className="space-y-2">
@@ -2075,11 +2216,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
 
                       setHandoverChecks((prev) => ({
                         ...prev,
-                        [text]: checked,
-
-                        ...(isCTB && !checked
-                          ? { CTB_report_reviewed: false }
-                          : {})
+                        [text]: checked
                       }))
                     }}
                     className="w-5 h-5"
@@ -2087,26 +2224,6 @@ const linkedPsyCase = getLinkedPsyCase(item)
 
                   <span>{text}</span>
                 </label>
-
-                {isCTB && handoverChecks.CTB && (
-                  <label className="ml-8 flex items-center gap-3 text-base bg-gray-50 border border-gray-200 rounded-2xl px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={handoverChecks.CTB_report_reviewed || false}
-                      onChange={(e) => {
-                        setHandoverChecks((prev) => ({
-                          ...prev,
-                          CTB_report_reviewed: e.target.checked
-                        }))
-                      }}
-                      className="w-5 h-5"
-                    />
-
-                    <span className="font-semibold text-gray-700">
-                      Report reviewed
-                    </span>
-                  </label>
-                )}
               </div>
             )
           })}
@@ -2118,15 +2235,36 @@ const linkedPsyCase = getLinkedPsyCase(item)
   detailModal.nursing_handover.trim() !== '' && (
     <button
       onClick={async () => {
-        await supabase
+        const now = new Date().toISOString()
+        const handoverTags = getHandoverTags(detailModal)
+        const hasCT = handoverTags.some(isCTTag)
+
+        const updatePayload = {
+          handover_done: handoverChecks
+        }
+
+        if (hasCT) {
+          updatePayload.ct_status =
+            normalizeCTStatus(detailModal.ct_status)
+          updatePayload.ct_updated_at = now
+        }
+
+        const { error } = await supabase
           .from('observation_cases')
-          .update({
-            handover_done: handoverChecks
-          })
+          .update(updatePayload)
           .eq('id', detailModal.id)
 
+        if (error) {
+          console.error(
+            'Save checklist and CT status error:',
+            error
+          )
+          alert('Unable to save changes')
+          return
+        }
+
         setDetailModal(null)
-        fetchCases()
+        await fetchCases()
       }}
       className="w-full mt-6 bg-[#0078AE] text-white py-4 rounded-2xl font-bold hover:bg-[#00638F]"
     >
