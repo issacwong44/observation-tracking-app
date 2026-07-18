@@ -1981,7 +1981,7 @@ async function confirmDischargePsyCase() {
       })
       .eq('id', psyCase.id)
 
-    if (psyError) {
+    if (psyInsertError) {
       throw psyError
     }
 

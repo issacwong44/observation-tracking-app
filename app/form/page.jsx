@@ -344,9 +344,9 @@ initial_handover_by_staff_name:
   if (newCase && psySpMissing.length > 0) {
   const { error: psyError } = await supabase
     .from('psy_handover_cases')
-    const {
+const {
   data: newPsyCase,
-  error: psyError
+  error: psyInsertError
 } = await supabase
   .from('psy_handover_cases')
   .insert([
@@ -416,8 +416,8 @@ initial_handover_by_staff_name:
   .select()
   .single()
 
-    if (psyError) {
-      console.log(psyError)
+    if (psyInsertError) {
+     console.log(psyInsertError)
       alert('Observation case submitted, but psychiatric handover was not created')
       setIsSubmitting(false)
       return

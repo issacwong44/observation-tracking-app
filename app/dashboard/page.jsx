@@ -374,7 +374,7 @@ async function handleAcknowledge(id) {
     .eq('observation_case_id', id)
     .eq('handover_hidden', false)
 
-  if (psyError) {
+ if (psyInsertError) {
     console.error(
       'Update psychiatric location error:',
       psyError
