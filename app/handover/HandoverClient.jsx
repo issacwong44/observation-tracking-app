@@ -3012,10 +3012,9 @@ const linkedPsyCase = getLinkedPsyCase(item)
     getLinkedObservationCase(item)
 
   return (
-      <div
+<div
   key={item.id}
-  onClick={() => openPsyEditModal(item)}
-  className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b-[16px] border-gray-200 hover:bg-gray-50 transition cursor-pointer bg-white"
+  className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b-[16px] border-gray-200 bg-white"
 >
         {/* Case Card */}
         <div className="p-4 md:p-5 md:border-r border-gray-100 bg-gray-50 md:bg-white">
@@ -3122,8 +3121,13 @@ const linkedPsyCase = getLinkedPsyCase(item)
           </div>
         </div>
 
-        {/* Psych Handover Notes */}
-        <div className="p-4 md:p-5 flex flex-col gap-3 relative">
+       {/* Psych Handover Notes */}
+<div
+  onClick={() =>
+    openPsyEditModal(item)
+  }
+  className="p-4 md:p-5 flex flex-col gap-3 relative cursor-pointer hover:bg-gray-50 transition"
+>
           <button
   type="button"
   onClick={(e) => {

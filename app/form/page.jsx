@@ -344,41 +344,77 @@ initial_handover_by_staff_name:
   if (newCase && psySpMissing.length > 0) {
   const { error: psyError } = await supabase
     .from('psy_handover_cases')
-    .insert([
-      {
-        observation_case_id: newCase.id,
+    const {
+  data: newPsyCase,
+  error: psyError
+} = await supabase
+  .from('psy_handover_cases')
+  .insert([
+    {
+      observation_case_id:
+        newCase.id,
 
-        bed_no: bed,
+      bed_no:
+        bed,
 
-        ae_suffix:
-          normalizedAeSuffix || null,
+      ae_suffix:
+        normalizedAeSuffix || null,
 
-        patient_label:
-          normalizedAeSuffix
-            ? `AE•••••${normalizedAeSuffix}`
-            : `Bed ${bed}`,
+      patient_label:
+        normalizedAeSuffix
+          ? `AE•••••${normalizedAeSuffix}`
+          : `Bed ${bed}`,
 
-        gender: gender,
-        age: age,
-        chief_complaint: diagnosis,
+      gender,
+      age,
 
-        location: specialPadRoom
+      chief_complaint:
+        diagnosis,
+
+      location:
+        specialPadRoom
           ? specialPadRoom
           : 'Cubicle',
 
-        risk_type: psySpMissing.join(', '),
+      risk_type:
+        psySpMissing.join(', '),
 
-        status: 'Pending Doctor Consultation',
+      status:
+        'Pending Doctor Consultation',
 
-        progress: '',
-        outcome: '',
-        miscellaneous: remarks || '',
-        free_text: '',
+      progress: '',
+      outcome: '',
+      miscellaneous:
+        remarks || '',
+      free_text: '',
 
-        source: 'observation_form',
-        handover_hidden: false
-      }
-    ])
+      source:
+        'observation_form',
+
+      handover_hidden:
+        false,
+
+      updated_by_staff_member_id:
+        currentStaff.id,
+
+      updated_by_staff_id:
+        currentStaff.staffId,
+
+      updated_by_staff_name:
+        currentStaff.displayName,
+
+      updated_by_at:
+        submittedAt,
+
+      updated_at:
+        submittedAt,
+
+      last_action_type:
+        'PSY_CASE_CREATED'
+    }
+  ])
+  .select()
+  .single()
 
     if (psyError) {
       console.log(psyError)
@@ -386,6 +422,78 @@ initial_handover_by_staff_name:
       setIsSubmitting(false)
       return
     }
+    if (newPsyCase) {
+  try {
+    await writeAuditLog({
+      staff:
+        currentStaff,
+
+      actionType:
+        'PSY_CASE_CREATED',
+
+      entityType:
+        'psy_handover_case',
+
+      entityId:
+        newPsyCase.id,
+
+      bedNo:
+        newPsyCase.bed_no,
+
+      oldData:
+        null,
+
+      newData: {
+        observation_case_id:
+          newPsyCase.observation_case_id,
+
+        bed_no:
+          newPsyCase.bed_no,
+
+        patient_label:
+          newPsyCase.patient_label,
+
+        gender:
+          newPsyCase.gender,
+
+        age:
+          newPsyCase.age,
+
+        chief_complaint:
+          newPsyCase.chief_complaint,
+
+        location:
+          newPsyCase.location,
+
+        risk_type:
+          newPsyCase.risk_type,
+
+        status:
+          newPsyCase.status,
+
+        source:
+          newPsyCase.source
+      },
+
+      metadata: {
+        createdFrom:
+          'observation_form',
+
+        linkedObservationCaseId:
+          newCase.id
+      }
+    })
+  } catch (auditError) {
+    console.error(
+      'Psychiatric case creation audit failed:',
+      auditError
+    )
+
+    alert(
+      'Psychiatric case created, but audit log failed'
+    )
+  }
+}
   }
 
   setSuccessModal(true)
