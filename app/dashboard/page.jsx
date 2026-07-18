@@ -15,6 +15,9 @@ import {
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import BottomNav from '../components/BottomNav'
+import StaffHeaderInfo from '../components/StaffHeaderInfo'
+import { useStaff } from '../components/StaffProvider'
+import { writeAuditLog } from '../../lib/auditLog'
 
 
 const CT_STATUS = {
@@ -80,6 +83,11 @@ function CTStatusBadge({ status, compact = false }) {
 }
 
 export default function DashboardPage() {
+  const {
+    currentStaff,
+    staffLoading
+  } = useStaff()
+
   const [cases, setCases] = useState([])
   const [modalTitle, setModalTitle] = useState('')
 const [modalCases, setModalCases] = useState([])
@@ -189,8 +197,27 @@ function getAlertColor(minutes) {
   setModalTitle(title)
   setModalCases(list)
 }
-async function moveCTToAwaitReport() {
+
+async function updateDashboardCTStatus(
+  newStatus
+) {
   if (!ctModal || ctUpdating) return
+
+  if (!currentStaff) {
+    alert('Staff login session not found')
+    return
+  }
+
+  const oldStatus =
+    normalizeCTStatus(ctModal.ct_status)
+
+  const normalizedNewStatus =
+    normalizeCTStatus(newStatus)
+
+  if (oldStatus === normalizedNewStatus) {
+    alert('CT status has not changed')
+    return
+  }
 
   setCtUpdating(true)
 
@@ -199,45 +226,119 @@ async function moveCTToAwaitReport() {
   const { error } = await supabase
     .from('observation_cases')
     .update({
-      ct_status: 'await_report',
-      ct_updated_at: now
+      ct_status:
+        normalizedNewStatus,
+
+      ct_updated_at:
+        now,
+
+      handover_updated_by_staff_member_id:
+        currentStaff.id,
+
+      handover_updated_by_staff_id:
+        currentStaff.staffId,
+
+      handover_updated_by_staff_name:
+        currentStaff.displayName,
+
+      handover_updated_at:
+        now,
+
+      handover_last_action_type:
+        'OBS_CT_STATUS_UPDATED'
     })
     .eq('id', ctModal.id)
 
   if (error) {
-    console.error('Update CT status error:', error)
+    console.error(
+      'Dashboard CT status update error:',
+      error
+    )
+
     alert('Unable to update CT status')
     setCtUpdating(false)
     return
   }
 
-  setCtModal(null)
-  setCtUpdating(false)
+  try {
+    await writeAuditLog({
+      staff: currentStaff,
 
-  await fetchCases()
-}
+      actionType:
+        'OBS_CT_STATUS_UPDATED',
 
-async function completeCTWorkflow() {
-  if (!ctModal || ctUpdating) return
+      entityType:
+        'observation_case',
 
-  setCtUpdating(true)
+      entityId:
+        ctModal.id,
 
-  const now = new Date().toISOString()
+      bedNo:
+        ctModal.bed_no,
 
-  const { error } = await supabase
-    .from('observation_cases')
-    .update({
-      ct_status: 'completed',
-      ct_updated_at: now
+      oldData: {
+        ct_status:
+          oldStatus
+      },
+
+      newData: {
+        ct_status:
+          normalizedNewStatus
+      },
+
+      metadata: {
+        source:
+          'dashboard_ct_card',
+
+        aeSuffix:
+          ctModal.ae_suffix || null,
+
+        diagnosis:
+          ctModal.diagnosis || null
+      }
     })
-    .eq('id', ctModal.id)
+  } catch (auditError) {
+    console.error(
+      'Dashboard CT audit failed:',
+      auditError
+    )
 
-  if (error) {
-    console.error('Complete CT workflow error:', error)
-    alert('Unable to complete CT workflow')
-    setCtUpdating(false)
-    return
+    alert(
+      'CT status updated, but audit log failed'
+    )
   }
+
+  setCases((prev) =>
+    prev.map((item) =>
+      String(item.id) ===
+      String(ctModal.id)
+        ? {
+            ...item,
+
+            ct_status:
+              normalizedNewStatus,
+
+            ct_updated_at:
+              now,
+
+            handover_updated_by_staff_member_id:
+              currentStaff.id,
+
+            handover_updated_by_staff_id:
+              currentStaff.staffId,
+
+            handover_updated_by_staff_name:
+              currentStaff.displayName,
+
+            handover_updated_at:
+              now,
+
+            handover_last_action_type:
+              'OBS_CT_STATUS_UPDATED'
+          }
+        : item
+    )
+  )
 
   setCtModal(null)
   setCtUpdating(false)
@@ -604,29 +705,31 @@ const filteredCases = sortedCases.filter((item) => {
   return (
     <div className="min-h-screen bg-[#f4f6f8] pb-32 md:pb-40">
 
-<div className="bg-[#0078AE] hover:bg-[#00638F] px-4 md:px-8 py-4 md:py-6 shadow-lg">
-  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-
+<div className="bg-[#0078AE] px-5 py-4 text-white shadow-lg md:px-8 md:py-5">
+  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
     <div>
-      <h1 className="text-xl md:text-3xl font-bold text-white">
+      <h1 className="text-xl font-bold md:text-3xl">
         Observation Room Tracking Dashboard
       </h1>
 
-      <p className="text-white/80 mt-1 text-sm md:text-base">
+      <p className="mt-1 text-sm text-white/80 md:text-base">
         NDH AED
       </p>
     </div>
 
-    <div className="text-left md:text-right">
-      <p className="text-xs md:text-sm text-white">
-        Current Time
-      </p>
+    <div className="flex flex-col gap-3 md:items-end">
+      <div className="text-left md:text-right">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-white/70">
+          Current Time
+        </p>
 
-      <p className="text-base md:text-2xl font-bold text-white mt-1">
-    {currentTime || '--'}
-    </p>
+        <p className="mt-1 text-base font-bold text-white md:text-xl">
+          {currentTime || '--'}
+        </p>
+      </div>
+
+      <StaffHeaderInfo />
     </div>
-
   </div>
 </div>
 
@@ -751,6 +854,7 @@ const filteredCases = sortedCases.filter((item) => {
   pendingCases={pendingCTCases}
   awaitReportCases={awaitReportCases}
   onCaseClick={setCtModal}
+  onViewAll={openCaseModal}
 />
 
 <SmallCard
@@ -1801,7 +1905,11 @@ onClick={async () => {
           <button
   type="button"
   disabled={ctUpdating}
-  onClick={completeCTWorkflow}
+  onClick={() =>
+  updateDashboardCTStatus(
+    CT_STATUS.COMPLETED
+  )
+}
   className="
     w-full rounded-2xl
     bg-green-600 px-5 py-4
@@ -1821,7 +1929,11 @@ onClick={async () => {
 <button
   type="button"
   disabled={ctUpdating}
-  onClick={moveCTToAwaitReport}
+  onClick={() =>
+  updateDashboardCTStatus(
+    CT_STATUS.AWAIT_REPORT
+  )
+}
   className="
     w-full rounded-2xl
     bg-[#C94B4B] px-5 py-4
@@ -1917,10 +2029,10 @@ function RiskWorkflowCard({
   onViewAll
 }) {
   const fallRiskPreview =
-    fallRiskCases.slice(0, 6)
+    fallRiskCases.slice(0, 8)
 
   const headInjuryPreview =
-    headInjuryCases.slice(0, 6)
+    headInjuryCases.slice(0, 8)
 
   return (
     <div className="overflow-hidden rounded-3xl border border-gray-100 bg-white shadow">
@@ -1959,7 +2071,7 @@ function RiskWorkflowCard({
           )}
         </div>
 
-        {fallRiskCases.length > 6 && (
+        {fallRiskCases.length > 8 && (
           <button
             type="button"
             onClick={() =>
@@ -2007,7 +2119,7 @@ function RiskWorkflowCard({
 
         </div>
 
-        {headInjuryCases.length > 6 && (
+        {headInjuryCases.length > 8 && (
           <button
             type="button"
             onClick={() =>
@@ -2029,7 +2141,8 @@ function RiskWorkflowCard({
 function CTWorkflowCard({
   pendingCases,
   awaitReportCases,
-  onCaseClick
+  onCaseClick,
+  onViewAll
 }) {
   return (
     <div className="overflow-hidden rounded-3xl bg-white shadow">
@@ -2070,7 +2183,7 @@ function CTWorkflowCard({
         </div>
 
         <div className="mt-3 flex min-h-[40px] flex-wrap gap-2">
-         {pendingCases.slice(0, 6).map((item) => (
+         {pendingCases.slice(0, 8).map((item) => (
   <button
     key={item.id}
     type="button"
@@ -2086,10 +2199,21 @@ function CTWorkflowCard({
       active:scale-95
     "
   >
-    Bed {item.bed_no}
+   {item.bed_no}
   </button>
 ))}
         </div>
+        {pendingCases.length > 8 && (
+  <button
+    type="button"
+    onClick={() =>
+      onViewAll('Pending CT', pendingCases)
+    }
+    className="mt-3 text-sm font-bold text-[#C94B4B]"
+  >
+    View All ›
+  </button>
+)}
       </div>
 
       {/* Divider */}
@@ -2108,7 +2232,7 @@ function CTWorkflowCard({
         </div>
 
         <div className="mt-3 flex min-h-[40px] flex-wrap gap-2">
-         {awaitReportCases.slice(0, 6).map((item) => (
+         {awaitReportCases.slice(0, 8).map((item) => (
   <button
     key={item.id}
     type="button"
@@ -2124,16 +2248,27 @@ function CTWorkflowCard({
       active:scale-95
     "
   >
-    Bed {item.bed_no}
+    {item.bed_no}
   </button>
 ))}
         </div>
+        {awaitReportCases.length > 8 && (
+  <button
+    type="button"
+    onClick={() =>
+      onViewAll('Await Report', awaitReportCases)
+    }
+    className="mt-3 text-sm font-bold text-[#D58A20]"
+  >
+    View All ›
+  </button>
+)}
       </div>
     </div>
   )
 }
 function SmallCard({ title, list, icon, color, onViewAll, extraButton }) {
-  const preview = list.slice(0, 6)
+  const preview = list.slice(0, 8)
 
   return (
     <div className="relative bg-white rounded-3xl p-6 pb-24 shadow border border-gray-100">
@@ -2201,7 +2336,7 @@ function SmallCard({ title, list, icon, color, onViewAll, extraButton }) {
       
       </div>
 
-      {list.length > 6 && (
+      {list.length > 8 && (
         <button
           onClick={() => onViewAll(title, list)}
           className="mt-3 text-sm font-bold"

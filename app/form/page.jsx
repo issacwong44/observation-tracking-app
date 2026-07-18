@@ -5,8 +5,17 @@ import { useSearchParams } from 'next/navigation'
 import { supabase } from '../../lib/supabase'
 import { useRouter } from 'next/navigation' 
 import BottomNav from '../components/BottomNav'
+import { useStaff } from '../components/StaffProvider'
+import { writeAuditLog } from '../../lib/auditLog'
+import StaffHeaderInfo from '../components/StaffHeaderInfo'
 
 function FormContent() {
+  const router = useRouter()
+
+  const {
+    currentStaff,
+    staffLoading
+  } = useStaff()
 
   const searchParams = useSearchParams()
   const bed = searchParams.get('bed')
@@ -62,21 +71,6 @@ function getSpecialPadRoom(bedNo) {
   return null
 }
 
-const router = useRouter()
-
-useEffect(() => {
-  const staff = localStorage.getItem('staff')
-
-  if (!staff) {
-    const currentUrl =
-      `/form?${searchParams.toString()}`
-
-    router.push(
-      `/login?redirect=${encodeURIComponent(currentUrl)}`
-    )
-  }
-}, [])
-
 useEffect(() => {
   const storedAeSuffix =
     sessionStorage.getItem(
@@ -98,6 +92,17 @@ async function handleSubmit(e) {
   e.preventDefault()
 
   if (isSubmitting) return
+
+  if (!currentStaff) {
+    alert('Staff login session not found')
+    router.replace(
+      `/login?redirect=${encodeURIComponent(
+        window.location.pathname +
+        window.location.search
+      )}`
+    )
+    return
+  }
 
   setIsSubmitting(true)
 
@@ -215,9 +220,33 @@ status: specialPadRoom
         ? false
         : true,
 
-      handover_seen_at: hasNursingHandover
-        ? null
-        : new Date().toISOString()
+handover_seen_at: hasNursingHandover
+  ? null
+  : submittedAt,
+
+created_by_staff_member_id:
+  currentStaff.id,
+
+created_by_staff_id:
+  currentStaff.staffId,
+
+created_by_staff_name:
+  currentStaff.displayName,
+
+initial_handover_by_staff_member_id:
+  hasNursingHandover
+    ? currentStaff.id
+    : null,
+
+initial_handover_by_staff_id:
+  hasNursingHandover
+    ? currentStaff.staffId
+    : null,
+
+initial_handover_by_staff_name:
+  hasNursingHandover
+    ? currentStaff.displayName
+    : null
     }
   ])
   .select()
@@ -229,6 +258,88 @@ status: specialPadRoom
     setIsSubmitting(false)
     return
   }
+  if (newCase) {
+  try {
+    await writeAuditLog({
+      staff: currentStaff,
+
+      actionType:
+        'OBS_CASE_CREATED',
+
+      entityType:
+        'observation_case',
+
+      entityId:
+        newCase.id,
+
+      bedNo:
+        newCase.bed_no,
+
+      oldData: null,
+
+      newData: {
+        bed_no:
+          newCase.bed_no,
+
+        ae_suffix:
+          newCase.ae_suffix,
+
+        gender:
+          newCase.gender,
+
+        age:
+          newCase.age,
+
+        category:
+          newCase.category,
+
+        diagnosis:
+          newCase.diagnosis,
+
+        fall_risk:
+          newCase.fall_risk,
+
+        missing_risk:
+          newCase.missing_risk,
+
+        head_injury:
+          newCase.head_injury,
+
+        q1h_monitoring:
+          newCase.q1h_monitoring,
+
+        nursing_handover:
+          newCase.nursing_handover,
+
+        ct_status:
+          newCase.ct_status,
+
+        remarks:
+          newCase.remarks
+      },
+
+      metadata: {
+        createdFrom:
+          'observation_form',
+
+        initialHandoverIncluded:
+          hasNursingHandover,
+
+        specialPadRoom:
+          specialPadRoom || null
+      }
+    })
+  } catch (auditError) {
+    console.error(
+      'Observation case creation audit failed:',
+      auditError
+    )
+
+    alert(
+      'Case submitted, but audit log failed'
+    )
+  }
+}
 
   if (newCase && psySpMissing.length > 0) {
   const { error: psyError } = await supabase
@@ -295,6 +406,16 @@ setRemarks('')
 }
 
 
+if (staffLoading) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#f4f6f8]">
+      <p className="font-bold text-gray-500">
+        Loading staff session...
+      </p>
+    </div>
+  )
+}
+
   return (
 <div className="min-h-screen bg-[#f4f6f8] px-4 pt-4 pb-32 md:px-8 md:pt-6 md:pb-36">
 
@@ -312,16 +433,20 @@ setRemarks('')
           </p>
         </div>
 
-        <div className="text-white text-left md:text-right">
-  <p className="text-2xl font-bold">
-    Bed {bed}
-  </p>
+<div className="flex flex-col gap-3 md:items-end">
+  <div className="text-left text-white md:text-right">
+    <p className="text-2xl font-bold">
+      Bed {bed}
+    </p>
 
-  {aeSuffix && (
-  <p className="mt-1 text-sm md:text-base text-white/80">
-    AE•••••{aeSuffix}
-  </p>
-)}
+    {aeSuffix && (
+      <p className="mt-1 text-sm text-white/80 md:text-base">
+        AE•••••{aeSuffix}
+      </p>
+    )}
+  </div>
+
+  <StaffHeaderInfo />
 </div>
 
       </div>

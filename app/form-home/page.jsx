@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import BottomNav from '../components/BottomNav'
+import StaffHeaderInfo from '../components/StaffHeaderInfo'
 
 export default function FormHomePage() {
   const router = useRouter()
@@ -238,19 +239,25 @@ if (!selectedAeSuffix) {
     <main className="min-h-[100dvh] bg-[#F4F6F8] px-4 pt-4 pb-28 sm:px-6 sm:pt-6 sm:pb-32 md:px-8 md:pt-8 md:pb-36">
       <div className="mx-auto flex min-h-[calc(100dvh-32px)] w-full max-w-[760px] flex-col md:min-h-[calc(100dvh-64px)]">
         {/* Header */}
-        <header className="rounded-[24px] bg-[#0078AE] px-5 py-6 text-white shadow-lg sm:px-7 sm:py-7 md:rounded-[32px] md:px-9 md:py-9">
-          <p className="text-sm font-semibold text-white/75 sm:text-base">
-            NDH AED
-          </p>
+       <header className="relative rounded-[24px] bg-[#0078AE] px-5 py-6 pb-24 text-white shadow-lg sm:px-7 sm:py-7 sm:pb-24 md:rounded-[32px] md:px-9 md:py-9 md:pb-9">
+  <div className="md:pr-[220px]">
+    <p className="text-sm font-semibold text-white/75 sm:text-base">
+      NDH AED
+    </p>
 
-          <h1 className="mt-1 text-2xl font-bold leading-tight sm:text-3xl md:text-4xl">
-            Observation Room Case Form
-          </h1>
+    <h1 className="mt-1 text-2xl font-bold leading-tight sm:text-3xl md:text-4xl">
+      Observation Room Case Form
+    </h1>
 
-          <p className="mt-2 text-sm text-white/80 sm:text-base md:text-lg">
-            Enter a bed number to open the patient form
-          </p>
-        </header>
+    <p className="mt-2 text-sm text-white/80 sm:text-base md:text-lg">
+      Enter a bed number to open the patient form
+    </p>
+  </div>
+
+  <div className="absolute bottom-5 right-5 sm:bottom-6 sm:right-7 md:bottom-8 md:right-9">
+    <StaffHeaderInfo />
+  </div>
+</header>
 
         {/* Main Card */}
         <section className="mt-4 flex flex-1 flex-col rounded-[24px] border border-gray-200 bg-white p-5 shadow-sm sm:mt-6 sm:p-7 md:rounded-[32px] md:p-9">

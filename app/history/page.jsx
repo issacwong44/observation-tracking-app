@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
 import BottomNav from '../components/BottomNav'
+import StaffHeaderInfo from '../components/StaffHeaderInfo'
 
 export default function HistoryPage() {
   const [cases, setCases] = useState([])
@@ -39,10 +40,21 @@ const filteredHistoryCases = historyCases.filter((item) => {
 
   return (
     <div className="min-h-screen bg-[#f4f6f8] pb-32 md:pb-36">
-      <div className="bg-[#0078AE] px-8 py-6 text-white">
-        <h1 className="text-3xl font-bold">History</h1>
-        <p className="text-white/80">Discharged observation cases</p>
-      </div>
+<div className="bg-[#0078AE] px-5 py-4 text-white md:px-8 md:py-5">
+  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div>
+      <h1 className="text-xl font-bold md:text-3xl">
+        History
+      </h1>
+
+      <p className="mt-1 text-sm text-white/80 md:text-base">
+        Discharged observation cases
+      </p>
+    </div>
+
+    <StaffHeaderInfo />
+  </div>
+</div>
 
       <div className="p-8">
         <Link href="/dashboard" className="font-bold text-[#006B8F]">

@@ -5,7 +5,9 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { Bell, Mars, Venus } from 'lucide-react'
 import BottomNav from '../components/BottomNav'
-
+import StaffHeaderInfo from '../components/StaffHeaderInfo'
+import { useStaff } from '../components/StaffProvider'
+import { writeAuditLog } from '@/lib/auditLog'
 
 const CT_STATUS = {
   PENDING: 'pending_ct',
@@ -69,9 +71,332 @@ function CTStatusBadge({ status, compact = false }) {
   )
 }
 
+function getPsyActionLabel(actionType) {
+  const labels = {
+    PSY_CASE_CREATED:
+      'Case added',
+
+    PSY_HANDOVER_UPDATED:
+      'Handover updated',
+
+    PSY_FREE_TEXT_UPDATED:
+      'Free text updated',
+
+    PSY_CASE_HIDDEN:
+      'Case hidden',
+
+    PSY_CASE_DISCHARGED:
+      'Case discharged'
+  }
+
+  return labels[actionType] || 'Case updated'
+}
+
+
+
+function getObservationActionLabel(actionType) {
+  const labels = {
+    OBS_CASE_CREATED:
+  'Case created',
+
+    OBS_HANDOVER_CHECKLIST_UPDATED:
+      'Checklist updated',
+
+    OBS_HANDOVER_FREE_TEXT_UPDATED:
+      'Free text updated',
+
+    OBS_CT_STATUS_UPDATED:
+      'CT status updated',
+
+    OBS_HANDOVER_AND_CT_UPDATED:
+      'Checklist and CT status updated',
+
+    OBS_HANDOVER_ADDED:
+      'Added to handover',
+
+    OBS_HANDOVER_HIDDEN:
+      'Hidden from handover'
+
+    
+  }
+
+  return labels[actionType] || 'Handover updated'
+}
+
+function getUnifiedActionLabel(actionType) {
+  if (
+    String(actionType || '').startsWith('PSY_')
+  ) {
+    return getPsyActionLabel(actionType)
+  }
+
+  if (
+    String(actionType || '').startsWith('OBS_')
+  ) {
+    return getObservationActionLabel(actionType)
+  }
+
+  return 'Case updated'
+}
+
+function getObservationActionDetails(log) {
+  const oldData = log.old_data || {}
+  const newData = log.new_data || {}
+
+  if (
+  log.action_type ===
+  'OBS_CASE_CREATED'
+) {
+  return {
+    before: null,
+
+    after: [
+      `Bed: ${newData.bed_no || '-'}`,
+      `Category: Cat ${newData.category || '-'}`,
+      `Diagnosis: ${newData.diagnosis || '-'}`,
+      `Handover: ${newData.nursing_handover || '-'}`,
+      `CT: ${
+        newData.ct_status
+          ? getCTStatusMeta(
+              newData.ct_status
+            ).label
+          : 'Not required'
+      }`
+    ].join('\n')
+  }
+}
+
+  if (
+    log.action_type ===
+    'OBS_HANDOVER_FREE_TEXT_UPDATED'
+  ) {
+    return {
+      before:
+        oldData.handover_note || '-',
+
+      after:
+        newData.handover_note || '-'
+    }
+  }
+
+  if (
+    log.action_type ===
+    'OBS_CT_STATUS_UPDATED'
+  ) {
+    return {
+      before:
+        getCTStatusMeta(
+          oldData.ct_status
+        ).label,
+
+      after:
+        getCTStatusMeta(
+          newData.ct_status
+        ).label
+    }
+  }
+
+  if (
+    log.action_type ===
+    'OBS_HANDOVER_CHECKLIST_UPDATED'
+  ) {
+    return {
+      before:
+        formatChecklistHistory(
+          oldData.handover_done
+        ),
+
+      after:
+        formatChecklistHistory(
+          newData.handover_done
+        )
+    }
+  }
+
+  if (
+    log.action_type ===
+    'OBS_HANDOVER_AND_CT_UPDATED'
+  ) {
+    return {
+      before:
+        `Checklist: ${formatChecklistHistory(
+          oldData.handover_done
+        )}\nCT: ${
+          getCTStatusMeta(
+            oldData.ct_status
+          ).label
+        }`,
+
+      after:
+        `Checklist: ${formatChecklistHistory(
+          newData.handover_done
+        )}\nCT: ${
+          getCTStatusMeta(
+            newData.ct_status
+          ).label
+        }`
+    }
+  }
+
+  if (
+    log.action_type ===
+    'OBS_HANDOVER_ADDED'
+  ) {
+    return {
+      before: null,
+      after: 'Added to handover'
+    }
+  }
+
+  if (
+    log.action_type ===
+    'OBS_HANDOVER_HIDDEN'
+  ) {
+    return {
+      before: 'Visible',
+      after: 'Hidden'
+    }
+  }
+
+  return {
+    before: null,
+    after: null
+  }
+}
+
+function formatChecklistHistory(checklist) {
+  if (!checklist) return '-'
+
+  const completedItems =
+    Object.entries(checklist)
+      .filter(([, value]) => value === true)
+      .map(([key]) => key)
+
+  return completedItems.length > 0
+    ? completedItems.join(', ')
+    : '-'
+}
+
+function getPsyActionDetails(log) {
+  const oldData = log.old_data || {}
+  const newData = log.new_data || {}
+
+  if (
+    log.action_type ===
+    'PSY_FREE_TEXT_UPDATED'
+  ) {
+    return {
+      oldValue:
+        oldData.free_text || '-',
+      newValue:
+        newData.free_text || '-'
+    }
+  }
+
+  if (
+    log.action_type ===
+    'PSY_HANDOVER_UPDATED'
+  ) {
+    return {
+      oldValue:
+        oldData.status || '-',
+      newValue:
+        newData.status || '-'
+    }
+  }
+
+  if (
+    log.action_type ===
+    'PSY_CASE_CREATED'
+  ) {
+    return {
+      oldValue: null,
+      newValue:
+        'Psychiatric case created'
+    }
+  }
+
+  if (
+    log.action_type ===
+    'PSY_CASE_HIDDEN'
+  ) {
+    return {
+      oldValue: 'Visible',
+      newValue: 'Hidden'
+    }
+  }
+
+  if (
+    log.action_type ===
+    'PSY_CASE_DISCHARGED'
+  ) {
+    return {
+      oldValue:
+        oldData.status || '-',
+      newValue: 'Discharged'
+    }
+  }
+
+  return {
+    oldValue: null,
+    newValue: null
+  }
+}
+
+function getUnifiedActionDetails(log) {
+  if (
+    String(log.action_type || '').startsWith(
+      'PSY_'
+    )
+  ) {
+    const psyDetails =
+      getPsyActionDetails(log)
+
+    return {
+      before:
+        psyDetails.oldValue,
+
+      after:
+        psyDetails.newValue
+    }
+  }
+
+  if (
+    String(log.action_type || '').startsWith(
+      'OBS_'
+    )
+  ) {
+    return getObservationActionDetails(log)
+  }
+
+  return {
+    before: null,
+    after: null
+  }
+}
+
+function formatLastUpdatedTime(timestamp) {
+  if (!timestamp) return ''
+
+  return new Date(timestamp).toLocaleString(
+    'en-GB',
+    {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    }
+  )
+}
+
 export default function HandoverPage({
   initialTab = 'observation'
 }) {
+
+  const {
+  currentStaff,
+  staffLoading
+} = useStaff()
   const [cases, setCases] = useState([])
   const [handoverNotes, setHandoverNotes] = useState({})
 const saveTimers = useRef({})
@@ -79,6 +404,22 @@ const [saveStatus, setSaveStatus] = useState({})
 const [isEditingNote, setIsEditingNote] = useState(false)
   const [detailModal, setDetailModal] = useState(null)
 const [handoverChecks, setHandoverChecks] = useState({})
+
+const [
+  observationHistoryModal,
+  setObservationHistoryModal
+] = useState(null)
+
+const [
+  observationHistoryLogs,
+  setObservationHistoryLogs
+] = useState([])
+
+const [
+  observationHistoryLoading,
+  setObservationHistoryLoading
+] = useState(false)
+
 const [hideConfirmModal, setHideConfirmModal] = useState(null)
 const [psyHideConfirmModal, setPsyHideConfirmModal] = useState(null)
 const [addHandoverModal, setAddHandoverModal] = useState(false)
@@ -106,6 +447,10 @@ const PSY_STATUS_AWAITING_PSYCH = 'Awaiting Psych Review'
 const PSY_STATUS_COMPLETE = 'Complete'
 const [psyEditModal, setPsyEditModal] = useState(null)
 
+const [psyHistoryModal, setPsyHistoryModal] = useState(null)
+const [psyHistoryLogs, setPsyHistoryLogs] = useState([])
+const [psyHistoryLoading, setPsyHistoryLoading] = useState(false)
+
 const [psyEditStatus, setPsyEditStatus] = useState(PSY_STATUS_PENDING_DOCTOR)
 const [psyEditOutcome, setPsyEditOutcome] = useState('')
 const [psyMonitoringChecks, setPsyMonitoringChecks] = useState({})
@@ -122,6 +467,10 @@ const [psyJudge, setPsyJudge] = useState(false)
 
 const [isPsyDischarging, setIsPsyDischarging] = useState(false)
 const [psyDischargeConfirmModal, setPsyDischargeConfirmModal] = useState(null)
+const [
+  handoverNotificationModal,
+  setHandoverNotificationModal
+] = useState(false)
 
 function extractAeSuffix(decodedText) {
   const value = String(decodedText || '')
@@ -262,8 +611,16 @@ useEffect(() => {
 }
   }
 
-  async function openObservationDetail(item) {
-  setDetailModal(item)
+async function openObservationDetail(item) {
+  setDetailModal({
+    ...item,
+    original_ct_status:
+      normalizeCTStatus(item.ct_status)
+  })
+
+  setHandoverChecks(
+    item.handover_done || {}
+  )
   setHandoverChecks(item.handover_done || {})
 
   const hasUnreadHandover =
@@ -307,6 +664,33 @@ useEffect(() => {
   }
 }
 
+async function openObservationHistory(item) {
+  setObservationHistoryModal(item)
+  setObservationHistoryLogs([])
+  setObservationHistoryLoading(true)
+
+  const { data, error } = await supabase.rpc(
+    'get_observation_case_audit_history',
+    {
+      p_case_id: String(item.id)
+    }
+  )
+
+  if (error) {
+    console.error(
+      'Load observation history error:',
+      error
+    )
+
+    setObservationHistoryLoading(false)
+    alert('Unable to load action history')
+    return
+  }
+
+  setObservationHistoryLogs(data || [])
+  setObservationHistoryLoading(false)
+}
+
 function getHandoverTags(item) {
   return item.nursing_handover
     ? item.nursing_handover.split(',').map((tag) => tag.trim())
@@ -317,7 +701,7 @@ function isHandoverTagDone(item, tagName) {
   return item.handover_done?.[tagName] === true
 }
 
-  function handleHandoverNoteChange(id, value) {
+ function handleHandoverNoteChange(id, value) {
   setHandoverNotes((prev) => ({
     ...prev,
     [id]: value
@@ -333,73 +717,455 @@ function isHandoverTagDone(item, tagName) {
   }
 
   saveTimers.current[id] = setTimeout(async () => {
+    if (!currentStaff) {
+      setSaveStatus((prev) => ({
+        ...prev,
+        [id]: 'error'
+      }))
+
+      alert('Staff login session not found')
+      return
+    }
+
+    const currentCase = cases.find(
+      (item) => String(item.id) === String(id)
+    )
+
+    const oldHandoverNote =
+      currentCase?.handover_note || ''
+
+    const now = new Date().toISOString()
+
     const { error } = await supabase
       .from('observation_cases')
       .update({
-        handover_note: value
+        handover_note: value,
+
+        handover_updated_by_staff_member_id:
+          currentStaff.id,
+
+        handover_updated_by_staff_id:
+          currentStaff.staffId,
+
+        handover_updated_by_staff_name:
+          currentStaff.displayName,
+
+        handover_updated_at: now,
+
+        handover_last_action_type:
+          'OBS_HANDOVER_FREE_TEXT_UPDATED'
       })
       .eq('id', id)
 
+    if (error) {
+      console.error(
+        'Save observation handover note error:',
+        error
+      )
+
+      setSaveStatus((prev) => ({
+        ...prev,
+        [id]: 'error'
+      }))
+
+      return
+    }
+
+    try {
+      await writeAuditLog({
+        staff: currentStaff,
+
+        actionType:
+          'OBS_HANDOVER_FREE_TEXT_UPDATED',
+
+        entityType:
+          'observation_case',
+
+        entityId:
+          id,
+
+        bedNo:
+          currentCase?.bed_no || null,
+
+        oldData: {
+          handover_note:
+            oldHandoverNote
+        },
+
+        newData: {
+          handover_note:
+            value
+        },
+
+        metadata: {
+          aeSuffix:
+            currentCase?.ae_suffix || null,
+
+          diagnosis:
+            currentCase?.diagnosis || null
+        }
+      })
+    } catch (auditError) {
+      console.error(
+        'Observation free text audit failed:',
+        auditError
+      )
+
+      setSaveStatus((prev) => ({
+        ...prev,
+        [id]: 'error'
+      }))
+
+      alert(
+        'Note saved, but audit log failed'
+      )
+
+      return
+    }
+
+    setCases((prev) =>
+      prev.map((item) =>
+        String(item.id) === String(id)
+          ? {
+              ...item,
+              handover_note: value,
+
+              handover_updated_by_staff_member_id:
+                currentStaff.id,
+
+              handover_updated_by_staff_id:
+                currentStaff.staffId,
+
+              handover_updated_by_staff_name:
+                currentStaff.displayName,
+
+              handover_updated_at:
+                now,
+
+              handover_last_action_type:
+                'OBS_HANDOVER_FREE_TEXT_UPDATED'
+            }
+          : item
+      )
+    )
+
     setSaveStatus((prev) => ({
       ...prev,
-      [id]: error ? 'error' : 'saved'
+      [id]: 'saved'
     }))
 
-    if (!error) {
-      setTimeout(() => {
-        setSaveStatus((prev) => ({
-          ...prev,
-          [id]: ''
-        }))
-      }, 2000)
-    }
+    setTimeout(() => {
+      setSaveStatus((prev) => ({
+        ...prev,
+        [id]: ''
+      }))
+    }, 2000)
   }, 800)
 }
 async function addToHandover(id) {
+  if (!currentStaff) {
+    alert('Staff login session not found')
+    return
+  }
+
+  const currentCase = cases.find(
+    (item) =>
+      String(item.id) === String(id)
+  )
+
+  if (!currentCase) {
+    alert('Observation case not found')
+    return
+  }
+
+  const now = new Date().toISOString()
+
+  const oldData = {
+    handover_manual:
+      currentCase.handover_manual || false,
+
+    handover_hidden:
+      currentCase.handover_hidden || false
+  }
+
+  const newData = {
+    handover_manual: true,
+    handover_hidden: false
+  }
+
   const { error } = await supabase
     .from('observation_cases')
     .update({
-      handover_manual: true,
-      handover_hidden: false
-    })
-    .eq('id', id)
+      ...newData,
 
-  if (!error) {
-    setAddHandoverModal(false)
-    fetchCases()
-  }
-}
-async function hideFromHandover(id) {
-  const { error } = await supabase
-    .from('observation_cases')
-    .update({
-      handover_hidden: true
-    })
-    .eq('id', id)
+      handover_updated_by_staff_member_id:
+        currentStaff.id,
 
-  if (!error) {
-    setHideConfirmModal(null)
-    fetchCases()
-  }
-}
+      handover_updated_by_staff_id:
+        currentStaff.staffId,
 
-async function hidePsyFromHandover(id) {
-  const { error } = await supabase
-    .from('psy_handover_cases')
-    .update({
-      handover_hidden: true,
-      updated_at: new Date().toISOString()
+      handover_updated_by_staff_name:
+        currentStaff.displayName,
+
+      handover_updated_at:
+        now,
+
+      handover_last_action_type:
+        'OBS_HANDOVER_ADDED'
     })
     .eq('id', id)
 
   if (error) {
-    console.error('Hide psychiatric case error:', error)
+    console.error(
+      'Add observation case to handover error:',
+      error
+    )
+
+    alert('Unable to add case to handover')
+    return
+  }
+
+  try {
+    await writeAuditLog({
+      staff: currentStaff,
+
+      actionType:
+        'OBS_HANDOVER_ADDED',
+
+      entityType:
+        'observation_case',
+
+      entityId:
+        currentCase.id,
+
+      bedNo:
+        currentCase.bed_no,
+
+      oldData,
+      newData,
+
+      metadata: {
+        aeSuffix:
+          currentCase.ae_suffix || null,
+
+        diagnosis:
+          currentCase.diagnosis || null,
+
+        source:
+          'manual_add'
+      }
+    })
+  } catch (auditError) {
+    console.error(
+      'Observation add to handover audit failed:',
+      auditError
+    )
+
+    alert(
+      'Case added, but audit log failed'
+    )
+  }
+
+  setAddHandoverModal(false)
+
+  await fetchCases()
+}
+async function hideFromHandover(id) {
+  if (!currentStaff) {
+    alert('Staff login session not found')
+    return
+  }
+
+  const currentCase = cases.find(
+    (item) =>
+      String(item.id) === String(id)
+  )
+
+  if (!currentCase) {
+    alert('Observation case not found')
+    return
+  }
+
+  const now = new Date().toISOString()
+
+  const oldData = {
+    handover_hidden:
+      currentCase.handover_hidden || false,
+
+    handover_manual:
+      currentCase.handover_manual || false
+  }
+
+  const newData = {
+    handover_hidden: true
+  }
+
+  const { error } = await supabase
+    .from('observation_cases')
+    .update({
+      handover_hidden: true,
+
+      handover_updated_by_staff_member_id:
+        currentStaff.id,
+
+      handover_updated_by_staff_id:
+        currentStaff.staffId,
+
+      handover_updated_by_staff_name:
+        currentStaff.displayName,
+
+      handover_updated_at:
+        now,
+
+      handover_last_action_type:
+        'OBS_HANDOVER_HIDDEN'
+    })
+    .eq('id', id)
+
+  if (error) {
+    console.error(
+      'Hide observation handover case error:',
+      error
+    )
+
+    alert('Unable to hide case from handover')
+    return
+  }
+
+  try {
+    await writeAuditLog({
+      staff: currentStaff,
+
+      actionType:
+        'OBS_HANDOVER_HIDDEN',
+
+      entityType:
+        'observation_case',
+
+      entityId:
+        currentCase.id,
+
+      bedNo:
+        currentCase.bed_no,
+
+      oldData,
+
+      newData: {
+        handover_hidden: true,
+        handover_manual:
+          currentCase.handover_manual || false
+      },
+
+      metadata: {
+        aeSuffix:
+          currentCase.ae_suffix || null,
+
+        diagnosis:
+          currentCase.diagnosis || null,
+
+        source:
+          'handover_page'
+      }
+    })
+  } catch (auditError) {
+    console.error(
+      'Observation hide audit failed:',
+      auditError
+    )
+
+    alert(
+      'Case hidden, but audit log failed'
+    )
+  }
+
+  setHideConfirmModal(null)
+
+  await fetchCases()
+}
+
+async function hidePsyFromHandover(id) {
+  if (!currentStaff) {
+    alert('Staff login session not found')
+    return
+  }
+
+  const currentCase = psyCases.find(
+    (item) => String(item.id) === String(id)
+  )
+
+  if (!currentCase) {
+    alert('Psychiatric case not found')
+    return
+  }
+
+  const now = new Date().toISOString()
+
+  const { error } = await supabase
+    .from('psy_handover_cases')
+    .update({
+      handover_hidden: true,
+
+      updated_by_staff_member_id:
+        currentStaff.id,
+
+      updated_by_staff_id:
+        currentStaff.staffId,
+
+      updated_by_staff_name:
+        currentStaff.displayName,
+
+        last_action_type:
+  'PSY_CASE_HIDDEN',
+
+      updated_by_at: now,
+      updated_at: now
+    })
+    .eq('id', id)
+
+  if (error) {
+    console.error(
+      'Hide psychiatric case error:',
+      error
+    )
+
     alert('Failed to hide psychiatric case')
     return
   }
 
+  try {
+    await writeAuditLog({
+      staff: currentStaff,
+      actionType: 'PSY_CASE_HIDDEN',
+      entityType: 'psy_handover_case',
+      entityId: currentCase.id,
+      bedNo: currentCase.bed_no,
+      oldData: {
+        handover_hidden:
+          currentCase.handover_hidden || false
+      },
+      newData: {
+        handover_hidden: true
+      },
+      metadata: {
+        patientLabel:
+          currentCase.patient_label || null,
+        location:
+          currentCase.location || null
+      }
+    })
+  } catch (auditError) {
+    console.error(
+      'Psychiatric hide audit failed:',
+      auditError
+    )
+
+    alert(
+      'Case hidden, but audit log failed'
+    )
+  }
+
   setPsyHideConfirmModal(null)
-  fetchPsyCases()
+  await fetchPsyCases()
 }
 
 function isStayOvernightBed(bedNo) {
@@ -676,27 +1442,125 @@ function handlePsyFreeTextChange(id, value) {
   }
 
   saveTimers.current[timerKey] = setTimeout(async () => {
+    if (!currentStaff) {
+      setPsyFreeTextSaveStatus((prev) => ({
+        ...prev,
+        [id]: 'error'
+      }))
+
+      alert('Staff login session not found')
+      return
+    }
+
+    const currentCase = psyCases.find(
+      (item) => String(item.id) === String(id)
+    )
+
+    const oldFreeText =
+      currentCase?.free_text || ''
+
+    const now = new Date().toISOString()
+
     const { error } = await supabase
       .from('psy_handover_cases')
       .update({
         free_text: value,
-        updated_at: new Date().toISOString()
+
+        updated_by_staff_member_id:
+          currentStaff.id,
+
+        updated_by_staff_id:
+          currentStaff.staffId,
+
+        updated_by_staff_name:
+          currentStaff.displayName,
+
+          last_action_type:
+  'PSY_FREE_TEXT_UPDATED',
+
+        updated_by_at: now,
+        updated_at: now
       })
       .eq('id', id)
 
+    if (error) {
+      console.error(
+        'Save psychiatric free text error:',
+        error
+      )
+
+      setPsyFreeTextSaveStatus((prev) => ({
+        ...prev,
+        [id]: 'error'
+      }))
+
+      return
+    }
+
+    try {
+      await writeAuditLog({
+        staff: currentStaff,
+        actionType: 'PSY_FREE_TEXT_UPDATED',
+        entityType: 'psy_handover_case',
+        entityId: id,
+        bedNo: currentCase?.bed_no || null,
+        oldData: {
+          free_text: oldFreeText
+        },
+        newData: {
+          free_text: value
+        },
+        metadata: {
+          patientLabel:
+            currentCase?.patient_label || null,
+          location:
+            currentCase?.location || null
+        }
+      })
+    } catch (auditError) {
+      console.error(
+        'Psychiatric free text audit failed:',
+        auditError
+      )
+
+      setPsyFreeTextSaveStatus((prev) => ({
+        ...prev,
+        [id]: 'error'
+      }))
+
+      return
+    }
+
+    setPsyCases((prev) =>
+      prev.map((item) =>
+        String(item.id) === String(id)
+          ? {
+              ...item,
+              free_text: value,
+              updated_by_staff_member_id:
+                currentStaff.id,
+              updated_by_staff_id:
+                currentStaff.staffId,
+              updated_by_staff_name:
+                currentStaff.displayName,
+              updated_by_at: now,
+              updated_at: now
+            }
+          : item
+      )
+    )
+
     setPsyFreeTextSaveStatus((prev) => ({
       ...prev,
-      [id]: error ? 'error' : 'saved'
+      [id]: 'saved'
     }))
 
-    if (!error) {
-      setTimeout(() => {
-        setPsyFreeTextSaveStatus((prev) => ({
-          ...prev,
-          [id]: ''
-        }))
-      }, 2000)
-    }
+    setTimeout(() => {
+      setPsyFreeTextSaveStatus((prev) => ({
+        ...prev,
+        [id]: ''
+      }))
+    }, 2000)
   }, 800)
 }
 
@@ -759,6 +1623,10 @@ const selectedObservationCase = selectedObservationCaseId
   : null
 
 async function handleAddPsyCase() {
+  if (!currentStaff) {
+  alert('Staff login session not found')
+  return
+}
   const selectedObservationCase =
     selectedObservationCaseId
       ? cases.find(
@@ -856,49 +1724,118 @@ async function handleAddPsyCase() {
     }
   }
 
-  const { error } = await supabase
-    .from('psy_handover_cases')
-    .insert([
-      {
-        observation_case_id:
-          selectedObservationCase?.id || null,
+const now = new Date().toISOString()
 
-        bed_no:
-          selectedObservationCase?.bed_no || null,
+const { data: insertedCases, error } = await supabase
+  .from('psy_handover_cases')
+  .insert([
+    {
+      observation_case_id:
+        selectedObservationCase?.id || null,
 
-        ae_suffix:
-          normalizedPsyAeSuffix,
+      bed_no:
+        selectedObservationCase?.bed_no || null,
 
-        patient_label:
-          `AE•••••${normalizedPsyAeSuffix}`,
+      ae_suffix:
+        normalizedPsyAeSuffix,
 
-        gender: psyGender,
-        age: psyAge,
-        location: psyLocation.trim(),
-        chief_complaint:
-          psyChiefComplaint.trim(),
+      patient_label:
+        `AE•••••${normalizedPsyAeSuffix}`,
 
-        risk_type: '',
-        status: PSY_STATUS_PENDING_DOCTOR,
+      gender: psyGender,
+      age: psyAge,
+      location: psyLocation.trim(),
+      chief_complaint:
+        psyChiefComplaint.trim(),
 
-        progress: '',
-        outcome: '',
-        miscellaneous: '',
-        free_text: '',
+      risk_type: '',
+      status: PSY_STATUS_PENDING_DOCTOR,
 
-        source: selectedObservationCase
-          ? 'observation_form'
-          : 'manual',
+      progress: '',
+      outcome: '',
+      miscellaneous: '',
+      free_text: '',
 
-        handover_hidden: false
-      }
-    ])
+      source: selectedObservationCase
+        ? 'observation_form'
+        : 'manual',
+
+      handover_hidden: false,
+
+      updated_by_staff_member_id:
+        currentStaff.id,
+
+      updated_by_staff_id:
+        currentStaff.staffId,
+
+      updated_by_staff_name:
+        currentStaff.displayName,
+
+        last_action_type:
+  'PSY_CASE_CREATED',
+
+      updated_by_at: now,
+      updated_at: now
+    }
+  ])
+  .select()
 
   if (error) {
     console.log(error)
     alert('Error adding psychiatric case')
     return
   }
+  const insertedCase = insertedCases?.[0]
+
+if (insertedCase) {
+  try {
+    await writeAuditLog({
+      staff: currentStaff,
+      actionType: 'PSY_CASE_CREATED',
+      entityType: 'psy_handover_case',
+      entityId: insertedCase.id,
+      bedNo: insertedCase.bed_no,
+      oldData: null,
+      newData: {
+        observation_case_id:
+          insertedCase.observation_case_id,
+        bed_no:
+          insertedCase.bed_no,
+        ae_suffix:
+          insertedCase.ae_suffix,
+        patient_label:
+          insertedCase.patient_label,
+        gender:
+          insertedCase.gender,
+        age:
+          insertedCase.age,
+        location:
+          insertedCase.location,
+        chief_complaint:
+          insertedCase.chief_complaint,
+        status:
+          insertedCase.status,
+        source:
+          insertedCase.source
+      },
+      metadata: {
+        createdFrom:
+          selectedObservationCase
+            ? 'observation_room'
+            : 'manual'
+      }
+    })
+  } catch (auditError) {
+    console.error(
+      'Psychiatric case creation audit failed:',
+      auditError
+    )
+
+    alert(
+      'Case added, but audit log failed'
+    )
+  }
+}
 
   setAddPsyCaseModal(false)
   resetPsyForm()
@@ -925,8 +1862,45 @@ function openPsyEditModal(item) {
   setPsyJudge(details.judge === true)
 }
 
+async function openPsyHistory(item) {
+  setPsyHistoryModal(item)
+  setPsyHistoryLogs([])
+  setPsyHistoryLoading(true)
+
+  const { data, error } = await supabase.rpc(
+    'get_psy_case_audit_history',
+    {
+      p_case_id: String(item.id)
+    }
+  )
+
+  if (error) {
+    console.error(
+      'Load psychiatric history error:',
+      error
+    )
+
+    setPsyHistoryLoading(false)
+    alert('Unable to load action history')
+    return
+  }
+
+  setPsyHistoryLogs(data || [])
+  setPsyHistoryLoading(false)
+}
+
 async function confirmDischargePsyCase() {
-  if (!psyDischargeConfirmModal || isPsyDischarging) return
+  if (
+    !psyDischargeConfirmModal ||
+    isPsyDischarging
+  ) {
+    return
+  }
+
+  if (!currentStaff) {
+    alert('Staff login session not found')
+    return
+  }
 
   const psyCase = psyDischargeConfirmModal
   const dischargeTime = new Date().toISOString()
@@ -937,50 +1911,107 @@ async function confirmDischargePsyCase() {
     const linkedObservationCase =
       psyCase.observation_case_id
         ? cases.find(
-            (item) => item.id === psyCase.observation_case_id
+            (item) =>
+              String(item.id) ===
+              String(psyCase.observation_case_id)
           )
         : cases.find(
             (item) =>
               psyCase.bed_no &&
-              String(item.bed_no) === String(psyCase.bed_no)
+              String(item.bed_no) ===
+                String(psyCase.bed_no)
           )
 
     if (linkedObservationCase) {
-      const { error: observationError } = await supabase
-        .from('observation_cases')
-        .update({
-          confirmed_dc_at: dischargeTime,
-          handover_hidden: true
-        })
-        .eq('id', linkedObservationCase.id)
+      const { error: observationError } =
+        await supabase
+          .from('observation_cases')
+          .update({
+            confirmed_dc_at: dischargeTime,
+            handover_hidden: true
+          })
+          .eq('id', linkedObservationCase.id)
 
       if (observationError) {
         throw observationError
       }
     }
 
+    const oldData = {
+      status: psyCase.status || '',
+      outcome: psyCase.outcome || '',
+      outcome_details:
+        psyCase.outcome_details || {},
+      handover_hidden:
+        psyCase.handover_hidden || false
+    }
+
+    const newData = {
+      status: PSY_STATUS_COMPLETE,
+      outcome: 'Discharge',
+      outcome_details: {
+        type: 'Discharge',
+        admission_form: '',
+        hospital: '',
+        ward: '',
+        fax_time: '',
+        reply_time: '',
+        transport: '',
+        judge: false
+      },
+      handover_hidden: true
+    }
+
     const { error: psyError } = await supabase
       .from('psy_handover_cases')
       .update({
-        status: PSY_STATUS_COMPLETE,
-        outcome: 'Discharge',
-        outcome_details: {
-          type: 'Discharge',
-          admission_form: '',
-          hospital: '',
-          ward: '',
-          fax_time: '',
-          reply_time: '',
-          transport: '',
-          judge: false
-        },
-        handover_hidden: true,
+        ...newData,
+
+        updated_by_staff_member_id:
+          currentStaff.id,
+
+        updated_by_staff_id:
+          currentStaff.staffId,
+
+        updated_by_staff_name:
+          currentStaff.displayName,
+
+        updated_by_at: dischargeTime,
         updated_at: dischargeTime
       })
       .eq('id', psyCase.id)
 
     if (psyError) {
       throw psyError
+    }
+
+    try {
+      await writeAuditLog({
+        staff: currentStaff,
+        actionType: 'PSY_CASE_DISCHARGED',
+        entityType: 'psy_handover_case',
+        entityId: psyCase.id,
+        bedNo: psyCase.bed_no,
+        oldData,
+        newData,
+        metadata: {
+          patientLabel:
+            psyCase.patient_label || null,
+          location:
+            psyCase.location || null,
+          linkedObservationCaseId:
+            linkedObservationCase?.id || null
+        }
+      })
+    } catch (auditError) {
+      console.error(
+        'Psychiatric discharge audit failed:',
+        auditError
+      )
+
+      alert(
+        'Patient discharged, but audit log failed'
+      )
     }
 
     setPsyDischargeConfirmModal(null)
@@ -991,8 +2022,14 @@ async function confirmDischargePsyCase() {
       fetchPsyCases()
     ])
   } catch (error) {
-    console.error('Psychiatric discharge error:', error)
-    alert('Discharge failed. Please try again.')
+    console.error(
+      'Psychiatric discharge error:',
+      error
+    )
+
+    alert(
+      'Discharge failed. Please try again.'
+    )
   } finally {
     setIsPsyDischarging(false)
   }
@@ -1000,76 +2037,171 @@ async function confirmDischargePsyCase() {
 
 async function savePsyChecklist() {
   if (!psyEditModal) return
+
+  if (!currentStaff) {
+    alert('Staff login session not found')
+    return
+  }
+
   if (
-  psyEditStatus === PSY_STATUS_COMPLETE &&
-  psyOutcomeType === 'Discharge'
-) {
-  await dischargePsyCase()
-  return
-}
+    psyEditStatus === PSY_STATUS_COMPLETE &&
+    psyOutcomeType === 'Discharge'
+  ) {
+    setPsyDischargeConfirmModal(psyEditModal)
+    return
+  }
+
+  const now = new Date().toISOString()
 
   const outcomeDetails =
-  psyEditStatus === PSY_STATUS_COMPLETE
-    ? {
-        type: psyOutcomeType,
-        admission_form: psyOutcomeType === 'Admission' ? psyAdmissionForm : '',
-        hospital: psyOutcomeType === 'Admission' ? psyHospital : '',
-        ward: psyOutcomeType === 'Admission' ? psyWard : '',
-        fax_time:
-          psyOutcomeType === 'Admission' && psyAdmissionForm
-            ? psyFaxTime
-            : '',
-        reply_time:
-          psyOutcomeType === 'Admission' && psyAdmissionForm
-            ? psyReplyTime
-            : '',
-        transport: psyOutcomeType === 'Admission' ? psyTransport : '',
-        judge:
-          psyOutcomeType === 'Admission' &&
-          psyAdmissionForm === 'F123'
-            ? psyJudge
-            : false
-      }
-    : {}
+    psyEditStatus === PSY_STATUS_COMPLETE
+      ? {
+          type: psyOutcomeType,
+          admission_form:
+            psyOutcomeType === 'Admission'
+              ? psyAdmissionForm
+              : '',
+          hospital:
+            psyOutcomeType === 'Admission'
+              ? psyHospital
+              : '',
+          ward:
+            psyOutcomeType === 'Admission'
+              ? psyWard
+              : '',
+          fax_time:
+            psyOutcomeType === 'Admission' &&
+            psyAdmissionForm
+              ? psyFaxTime
+              : '',
+          reply_time:
+            psyOutcomeType === 'Admission' &&
+            psyAdmissionForm
+              ? psyReplyTime
+              : '',
+          transport:
+            psyOutcomeType === 'Admission'
+              ? psyTransport
+              : '',
+          judge:
+            psyOutcomeType === 'Admission' &&
+            psyAdmissionForm === 'F123'
+              ? psyJudge
+              : false
+        }
+      : {}
 
   const outcomeSummary =
     psyEditStatus === PSY_STATUS_COMPLETE
       ? psyOutcomeType === 'Admission'
-        ? `Admission${psyHospital ? ` - ${psyHospital}` : ''}${psyWard ? ` ${psyWard}` : ''}`
+        ? `Admission${
+            psyHospital
+              ? ` - ${psyHospital}`
+              : ''
+          }${
+            psyWard
+              ? ` ${psyWard}`
+              : ''
+          }`
         : psyOutcomeType === 'Discharge'
-        ? 'Discharge'
-        : ''
+          ? 'Discharge'
+          : ''
       : ''
+
+  const oldData = {
+    status: psyEditModal.status || '',
+    outcome: psyEditModal.outcome || '',
+    outcome_details:
+      psyEditModal.outcome_details || {},
+    monitoring_checks:
+      psyEditModal.monitoring_checks || {},
+    miscellaneous_checks:
+      psyEditModal.miscellaneous_checks || {}
+  }
+
+  const newData = {
+    status: psyEditStatus,
+    outcome: outcomeSummary,
+    outcome_details: outcomeDetails,
+    monitoring_checks: psyMonitoringChecks,
+    miscellaneous_checks: psyMiscChecks
+  }
 
   const { error } = await supabase
     .from('psy_handover_cases')
     .update({
-      status: psyEditStatus,
-      outcome: outcomeSummary,
-      outcome_details: outcomeDetails,
-      monitoring_checks: psyMonitoringChecks,
-      miscellaneous_checks: psyMiscChecks,
-      updated_at: new Date().toISOString()
+      ...newData,
+
+      updated_by_staff_member_id:
+        currentStaff.id,
+
+      updated_by_staff_id:
+        currentStaff.staffId,
+
+      updated_by_staff_name:
+        currentStaff.displayName,
+
+        last_action_type:
+    'PSY_HANDOVER_UPDATED',
+
+      updated_by_at: now,
+      updated_at: now
     })
     .eq('id', psyEditModal.id)
 
   if (error) {
-    console.log(error)
+    console.error(
+      'Error saving psychiatric checklist:',
+      error
+    )
+
     alert('Error saving psychiatric checklist')
     return
   }
 
+  try {
+    await writeAuditLog({
+      staff: currentStaff,
+      actionType: 'PSY_HANDOVER_UPDATED',
+      entityType: 'psy_handover_case',
+      entityId: psyEditModal.id,
+      bedNo: psyEditModal.bed_no,
+      oldData,
+      newData,
+      metadata: {
+        patientLabel:
+          psyEditModal.patient_label || null,
+        location:
+          psyEditModal.location || null
+      }
+    })
+  } catch (auditError) {
+    console.error(
+      'Psychiatric audit log failed:',
+      auditError
+    )
+
+    alert(
+      'Handover saved, but audit log failed'
+    )
+  }
+
   setPsyEditModal(null)
-  fetchPsyCases()
+  await fetchPsyCases()
 }
 
 const handoverCases = cases.filter((item) => {
   const isCatOneOrTwo =
-    Number(item.category) === 1 || Number(item.category) === 2
+    Number(item.category) === 1 ||
+    Number(item.category) === 2
 
-  const hasHandover =
-    item.nursing_handover &&
-    item.nursing_handover.trim() !== ''
+  const handoverTags =
+    getHandoverTags(item)
+
+  const hasNonCTHandover =
+    handoverTags.some(
+      (tag) => !isCTTag(tag)
+    )
 
   const isStayOvernight =
     isStayOvernightBed(item.bed_no)
@@ -1078,7 +2210,12 @@ const handoverCases = cases.filter((item) => {
     item.handover_manual === true
 
   return (
-    (isCatOneOrTwo || hasHandover || isStayOvernight || isManualHandover) &&
+    (
+      isCatOneOrTwo ||
+      hasNonCTHandover ||
+      isStayOvernight ||
+      isManualHandover
+    ) &&
     !item.handover_hidden
   )
 })
@@ -1153,12 +2290,16 @@ const q1hCases = cases.filter(
 const psychiatricCases = psyCases
 
 const unreadHandoverCases = cases.filter((item) => {
-  const hasNursingHandover =
-    item.nursing_handover &&
-    item.nursing_handover.trim() !== ''
+  const handoverTags =
+    getHandoverTags(item)
+
+  const hasNonCTHandover =
+    handoverTags.some(
+      (tag) => !isCTTag(tag)
+    )
 
   return (
-    hasNursingHandover &&
+    hasNonCTHandover &&
     item.handover_seen !== true &&
     !item.handover_hidden
   )
@@ -1181,15 +2322,30 @@ const selectableObservationCases = cases
   })
 
 function getLinkedPsyCase(item) {
-  return psyCases.find((psy) => {
-    const sameObservationCase =
-      psy.observation_case_id && psy.observation_case_id === item.id
+  if (!item?.id) return null
 
-    const sameBed =
-      psy.bed_no && item.bed_no && String(psy.bed_no) === String(item.bed_no)
+  return (
+    psyCases.find(
+      (psy) =>
+        psy.observation_case_id &&
+        String(psy.observation_case_id) ===
+          String(item.id)
+    ) || null
+  )
+}
 
-    return sameObservationCase || sameBed
-  })
+function getLinkedObservationCase(psyItem) {
+  if (!psyItem?.observation_case_id) {
+    return null
+  }
+
+  return (
+    cases.find(
+      (item) =>
+        String(item.id) ===
+        String(psyItem.observation_case_id)
+    ) || null
+  )
 }
 
 const awaitingPsychCases = psychiatricCases.filter((item) =>
@@ -1207,18 +2363,24 @@ const forAdmissionPsyCases = psychiatricCases.filter((item) =>
   return (
     <main className="min-h-screen bg-[#F5F5F7] pb-32 md:pb-36">
       {/* Header */}
-      <div className="h-20 md:h-28 bg-[#0078AE] text-white shadow-sm px-5 md:px-8 flex flex-col justify-center">
-  <h1 className="text-xl md:text-3xl font-bold">
-  {handoverTab === 'psy'
-    ? 'Psychiatric Handover'
-    : 'Observation Handover'}
-</h1>
+    <div className="bg-[#0078AE] px-5 py-4 text-white shadow-sm md:px-8 md:py-5">
+  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div>
+      <h1 className="text-xl font-bold md:text-3xl">
+        {handoverTab === 'psy'
+          ? 'Psychiatric Handover'
+          : 'Observation Handover'}
+      </h1>
 
-<p className="text-sm md:text-lg text-white/80">
-  {handoverTab === 'psy'
-    ? 'Psychiatric patient handover board'
-    : 'Observation Room handover board'}
-</p>
+      <p className="mt-1 text-sm text-white/80 md:text-lg">
+        {handoverTab === 'psy'
+          ? 'Psychiatric patient handover board'
+          : 'Observation Room handover board'}
+      </p>
+    </div>
+
+    <StaffHeaderInfo />
+  </div>
 </div>
 
     <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-6 md:mt-8 mb-4 md:mb-6 px-4 md:px-8">
@@ -1291,24 +2453,31 @@ const forAdmissionPsyCases = psychiatricCases.filter((item) =>
       Handover Notes
     </span>
 
-    <div className="relative">
-      <Bell
-        size={20}
-        className={
-          unreadHandoverCount > 0
-            ? 'text-red-500'
-            : 'text-gray-400'
-        }
-      />
+<button
+  type="button"
+  onClick={() =>
+    setHandoverNotificationModal(true)
+  }
+  className="relative flex h-10 w-10 items-center justify-center rounded-full hover:bg-gray-100"
+  aria-label="Open handover notifications"
+>
+  <Bell
+    size={22}
+    className={
+      unreadHandoverCount > 0
+        ? 'text-red-500'
+        : 'text-gray-400'
+    }
+  />
 
-      {unreadHandoverCount > 0 && (
-        <span className="absolute -top-2 -right-2 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-          {unreadHandoverCount > 9
-            ? '9+'
-            : unreadHandoverCount}
-        </span>
-      )}
-    </div>
+  {unreadHandoverCount > 0 && (
+    <span className="absolute right-0 top-0 flex h-[19px] min-w-[19px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+      {unreadHandoverCount > 9
+        ? '9+'
+        : unreadHandoverCount}
+    </span>
+  )}
+</button>
   </div>
 
   <button
@@ -1330,24 +2499,27 @@ const forAdmissionPsyCases = psychiatricCases.filter((item) =>
 
 const hasHandover = handoverTags.length > 0
 
-const allHandoverDone =
-  hasHandover &&
-  handoverTags.every((tag) =>
-    isCTTag(tag)
-      ? normalizeCTStatus(item.ct_status) === CT_STATUS.COMPLETED
-      : item.handover_done?.[tag] === true
-  )
+const hasOutstandingHandover =
+  handoverTags.some((tag) => {
+    if (isCTTag(tag)) {
+      return (
+        normalizeCTStatus(item.ct_status) ===
+        CT_STATUS.PENDING
+      )
+    }
+
+    return item.handover_done?.[tag] !== true
+  })
 
 const linkedPsyCase = getLinkedPsyCase(item)
     
 
   return (
     
-  <div
-    key={item.id}
-    onClick={() => openObservationDetail(item)}
-   className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b-[16px] border-gray-200 cursor-pointer hover:bg-gray-50 transition"
-  > 
+<div
+  key={item.id}
+  className="grid grid-cols-1 md:grid-cols-[260px_1fr] border-b-[16px] border-gray-200"
+>
                   {/* Bed card */}
                   <div className="p-4 md:p-5 md:border-r border-gray-100">
                     <div className="mb-3">
@@ -1423,13 +2595,14 @@ const linkedPsyCase = getLinkedPsyCase(item)
         : 'In Observation'}
     </span>
   </div>
-  {/* Diagnosis */}
+ {/* Diagnosis */}
 <div className="flex justify-between items-center gap-3">
   <div className="flex items-center gap-2 text-[#0078AE]">
-   <span className="text-gray-500">
+    <span className="text-gray-500">
       Dx
     </span>
-     <span className="text-xs">
+
+    <span className="text-xs">
       ▲
     </span>
   </div>
@@ -1439,12 +2612,62 @@ const linkedPsyCase = getLinkedPsyCase(item)
   </span>
 </div>
 
+{(
+  item.handover_updated_by_staff_name ||
+  item.created_by_staff_name
+) && (
+  <div className="mt-4 border-t border-gray-200 pt-3">
+    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+      Last update
+    </p>
+
+    <p className="mt-1 text-xs font-bold text-gray-800">
+      {item.handover_updated_by_staff_name ||
+        item.created_by_staff_name}
+    </p>
+
+    <p className="mt-1 text-[11px] leading-4 text-gray-500">
+      {item.handover_last_action_type
+        ? getObservationActionLabel(
+            item.handover_last_action_type
+          )
+        : 'Case created'}
+
+      {(item.handover_updated_at ||
+        item.created_at) && (
+        <>
+          {' · '}
+          {formatLastUpdatedTime(
+            item.handover_updated_at ||
+              item.created_at
+          )}
+        </>
+      )}
+    </p>
+
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        openObservationHistory(item)
+      }}
+      className="mt-2 text-[11px] font-bold text-[#0078AE] hover:underline"
+    >
+      View History
+    </button>
+  </div>
+)}
 
 </div>
 </div>
 
-                  {/* Handover Notes */}
-<div className="p-4 md:p-5 flex flex-col gap-3 relative">
+{/* Handover Notes */}
+<div
+  onClick={() =>
+    openObservationDetail(item)
+  }
+  className="p-4 md:p-5 flex flex-col gap-3 relative cursor-pointer hover:bg-gray-50 transition"
+>
  <button
   onClick={(e) => {
     e.stopPropagation()
@@ -1458,7 +2681,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
   {/* Cubicle handover + remarks */}
 <div
   className={`rounded-2xl p-3 min-h-[70px] border ${
-     !hasHandover || allHandoverDone
+    !hasHandover || !hasOutstandingHandover
       ? 'bg-white border-gray-200'
       : 'bg-yellow-50 border-yellow-100'
   }`}
@@ -1615,43 +2838,85 @@ const linkedPsyCase = getLinkedPsyCase(item)
   </div>
 )}
 </div>
-  {/* Free text */}
-  <div className="flex-1 bg-white border border-gray-200 rounded-2xl p-3">
+  <div
+  className={`grid grid-cols-1 gap-3 ${
+    linkedPsyCase
+      ? 'md:grid-cols-2'
+      : ''
+  }`}
+>
+  {/* Observation Free Text */}
+  <div className="bg-white border border-gray-200 rounded-2xl p-3">
     <p className="text-xs font-bold text-gray-500 mb-2">
-      Free Text
+      Observation Free Text
     </p>
 
     <textarea
-  value={handoverNotes[item.id] || ''}
-  onClick={(e) => e.stopPropagation()}
-   onFocus={() => setIsEditingNote(true)}
-  onBlur={() => setIsEditingNote(false)}
-  onChange={(e) => {
-    handleHandoverNoteChange(item.id, e.target.value)
-  }}
-  placeholder="Enter handover notes..."
-  className="w-full min-h-[90px] resize-none outline-none text-sm md:text-base text-gray-700 placeholder:text-gray-400"
-/>
-<div className="mt-2 h-5 text-xs font-semibold">
-  {saveStatus[item.id] === 'saving' && (
-    <span className="text-gray-400">
-      Saving...
-    </span>
-  )}
+      value={handoverNotes[item.id] || ''}
+      onClick={(e) => e.stopPropagation()}
+      onFocus={() => setIsEditingNote(true)}
+      onBlur={() => setIsEditingNote(false)}
+      onChange={(e) => {
+        handleHandoverNoteChange(
+          item.id,
+          e.target.value
+        )
+      }}
+      placeholder="Enter observation handover notes..."
+      className="w-full min-h-[90px] resize-none outline-none text-sm md:text-base text-gray-700 placeholder:text-gray-400"
+    />
 
-  {saveStatus[item.id] === 'saved' && (
-    <span className="text-green-600">
-      Saved ✓
-    </span>
-  )}
+    <div className="mt-2 h-5 text-xs font-semibold">
+      {saveStatus[item.id] === 'saving' && (
+        <span className="text-gray-400">
+          Saving...
+        </span>
+      )}
 
-  {saveStatus[item.id] === 'error' && (
-    <span className="text-red-600">
-      Save failed
-    </span>
-  )}
-</div>
+      {saveStatus[item.id] === 'saved' && (
+        <span className="text-green-600">
+          Saved ✓
+        </span>
+      )}
+
+      {saveStatus[item.id] === 'error' && (
+        <span className="text-red-600">
+          Save failed
+        </span>
+      )}
+    </div>
   </div>
+
+  {linkedPsyCase && (
+  <div className="bg-purple-50 border border-purple-100 rounded-2xl p-3">
+    <p className="text-xs font-bold text-purple-700 mb-2">
+      Psychiatric Free Text
+    </p>
+
+    <div className="min-h-[90px] whitespace-pre-wrap text-sm md:text-base text-gray-700">
+      {linkedPsyCase.free_text || '-'}
+    </div>
+
+    {linkedPsyCase.updated_by_staff_name && (
+      <p className="mt-2 text-[11px] text-gray-500">
+        Last updated by{' '}
+        <span className="font-bold">
+          {linkedPsyCase.updated_by_staff_name}
+        </span>
+
+        {linkedPsyCase.updated_by_at && (
+          <>
+            {' · '}
+            {formatLastUpdatedTime(
+              linkedPsyCase.updated_by_at
+            )}
+          </>
+        )}
+      </p>
+    )}
+  </div>
+)}
+</div>
 
 </div>
                 </div>
@@ -1742,7 +3007,11 @@ const linkedPsyCase = getLinkedPsyCase(item)
       No psychiatric cases yet
     </div>
   ) : (
-    psychiatricCases.map((item) => (
+    psychiatricCases.map((item) => {
+  const linkedObservationCase =
+    getLinkedObservationCase(item)
+
+  return (
       <div
   key={item.id}
   onClick={() => openPsyEditModal(item)}
@@ -1813,6 +3082,43 @@ const linkedPsyCase = getLinkedPsyCase(item)
       : item.status || PSY_STATUS_PENDING_DOCTOR}
   </span>
 </div>
+
+{item.updated_by_staff_name && (
+  <div className="mt-3 border-t border-gray-200 pt-3">
+    <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+      Last update
+    </p>
+
+    <p className="mt-1 text-xs font-bold text-gray-800">
+      {item.updated_by_staff_name}
+    </p>
+
+    <p className="mt-1 text-[11px] leading-4 text-gray-500">
+      {getPsyActionLabel(
+        item.last_action_type
+      )}
+
+      {item.updated_by_at && (
+        <>
+          {' · '}
+          {formatLastUpdatedTime(
+            item.updated_by_at
+          )}
+        </>
+      )}
+    </p>
+     <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation()
+        openPsyHistory(item)
+      }}
+      className="mt-2 text-[11px] font-bold text-[#0078AE] hover:underline"
+    >
+      View History
+    </button>
+  </div>
+)}
           </div>
         </div>
 
@@ -2004,47 +3310,416 @@ const linkedPsyCase = getLinkedPsyCase(item)
 </div>
           </div>
 
-          <div className="bg-white border border-gray-200 rounded-2xl p-3">
-            <p className="text-xs font-bold text-gray-500 mb-2">
-              Free Text
-            </p>
-            <textarea
-  value={psyFreeTextNotes[item.id] || ''}
-  onClick={(e) => e.stopPropagation()}
-  onFocus={() => setIsEditingNote(true)}
-  onBlur={() => setIsEditingNote(false)}
-  onChange={(e) => {
-    handlePsyFreeTextChange(item.id, e.target.value)
-  }}
-  placeholder="Enter psychiatric handover notes..."
-  className="w-full min-h-[70px] md:min-h-[90px] resize-none outline-none text-sm md:text-base text-gray-700 placeholder:text-gray-400 bg-transparent"
-/>
+          <div
+  className={`grid grid-cols-1 gap-3 ${
+    linkedObservationCase
+      ? 'md:grid-cols-2'
+      : ''
+  }`}
+>
+  {/* Psychiatric Free Text */}
+  <div className="bg-white border border-gray-200 rounded-2xl p-3">
+    <p className="text-xs font-bold text-gray-500 mb-2">
+      Psychiatric Free Text
+    </p>
 
-<div className="mt-2 h-5 text-xs font-semibold">
-  {psyFreeTextSaveStatus[item.id] === 'saving' && (
-    <span className="text-gray-400">
-      Saving...
-    </span>
-  )}
+    <textarea
+      value={psyFreeTextNotes[item.id] || ''}
+      onClick={(e) => e.stopPropagation()}
+      onFocus={() => setIsEditingNote(true)}
+      onBlur={() => setIsEditingNote(false)}
+      onChange={(e) => {
+        handlePsyFreeTextChange(
+          item.id,
+          e.target.value
+        )
+      }}
+      placeholder="Enter psychiatric handover notes..."
+      className="w-full min-h-[70px] resize-none bg-transparent text-sm text-gray-700 outline-none placeholder:text-gray-400 md:min-h-[90px] md:text-base"
+    />
 
-  {psyFreeTextSaveStatus[item.id] === 'saved' && (
-    <span className="text-green-600">
-      Saved ✓
-    </span>
-  )}
+    <div className="mt-2 h-5 text-xs font-semibold">
+      {psyFreeTextSaveStatus[item.id] ===
+        'saving' && (
+        <span className="text-gray-400">
+          Saving...
+        </span>
+      )}
 
-  {psyFreeTextSaveStatus[item.id] === 'error' && (
-    <span className="text-red-600">
-      Save failed
-    </span>
+      {psyFreeTextSaveStatus[item.id] ===
+        'saved' && (
+        <span className="text-green-600">
+          Saved ✓
+        </span>
+      )}
+
+      {psyFreeTextSaveStatus[item.id] ===
+        'error' && (
+        <span className="text-red-600">
+          Save failed
+        </span>
+      )}
+    </div>
+  </div>
+
+  {/* Only show when linked from Observation Room */}
+  {linkedObservationCase && (
+    <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3">
+      <p className="mb-2 text-xs font-bold text-[#0078AE]">
+        Observation Free Text
+      </p>
+
+      <div className="min-h-[70px] whitespace-pre-wrap text-sm text-gray-700 md:min-h-[90px] md:text-base">
+        {linkedObservationCase.handover_note || '-'}
+      </div>
+
+      {linkedObservationCase
+        .handover_updated_by_staff_name && (
+        <p className="mt-2 text-[11px] text-gray-500">
+          Last updated by{' '}
+          <span className="font-bold">
+            {
+              linkedObservationCase
+                .handover_updated_by_staff_name
+            }
+          </span>
+
+          {linkedObservationCase
+            .handover_updated_at && (
+            <>
+              {' · '}
+              {formatLastUpdatedTime(
+                linkedObservationCase
+                  .handover_updated_at
+              )}
+            </>
+          )}
+        </p>
+      )}
+    </div>
   )}
 </div>
-          </div>
         </div>
       </div>
-    ))
+      )
+})
   )}
 </div>
+)}
+
+{handoverNotificationModal && (
+  <div
+    className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 p-4"
+    onClick={() =>
+      setHandoverNotificationModal(false)
+    }
+  >
+    <div
+      className="max-h-[88vh] w-full max-w-[620px] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl md:p-8"
+      onClick={(event) =>
+        event.stopPropagation()
+      }
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+            Nursing Handover Notifications
+          </p>
+
+          <h2 className="mt-1 text-2xl font-bold text-[#0078AE]">
+            New Handover
+          </h2>
+
+          <p className="mt-1 text-sm text-gray-500">
+            {unreadHandoverCount}{' '}
+            unread notification
+            {unreadHandoverCount === 1
+              ? ''
+              : 's'}
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            setHandoverNotificationModal(false)
+          }
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-2xl font-bold text-gray-500"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="mt-6 space-y-3">
+        {unreadHandoverCases.length === 0 ? (
+          <div className="rounded-2xl bg-gray-50 p-8 text-center">
+            <Bell
+              size={34}
+              className="mx-auto text-gray-300"
+            />
+
+            <p className="mt-3 font-bold text-gray-500">
+              No unread handover
+            </p>
+          </div>
+        ) : (
+          unreadHandoverCases.map((item) => {
+            const tags =
+              getHandoverTags(item).filter(
+                (tag) => !isCTTag(tag)
+              )
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={async () => {
+                  setHandoverNotificationModal(
+                    false
+                  )
+
+                  await openObservationDetail(
+                    item
+                  )
+                }}
+                className="w-full rounded-2xl border border-red-100 bg-red-50 p-4 text-left transition hover:bg-red-100"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="inline-flex rounded-xl bg-blue-100 px-3 py-1.5 font-bold text-[#0078AE]">
+                      Bed {item.bed_no}
+                    </div>
+
+                    {item.ae_suffix && (
+                      <p className="mt-2 text-xs font-semibold tracking-wider text-gray-500">
+                        AE•••••
+                        {item.ae_suffix}
+                      </p>
+                    )}
+                  </div>
+
+                  <span className="rounded-lg bg-red-100 px-2 py-1 text-[10px] font-bold uppercase text-red-600">
+                    New
+                  </span>
+                </div>
+
+                <div className="mt-4">
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+                    Nursing handover
+                  </p>
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {tags.length > 0 ? (
+                      tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-xl bg-yellow-100 px-3 py-1 text-sm font-bold text-yellow-700"
+                        >
+                          {tag}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-sm text-gray-400">
+                        -
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4 border-t border-red-100 pt-3">
+                  <p className="text-xs text-gray-500">
+                    Created by
+                  </p>
+
+                  <p className="mt-1 font-bold text-gray-900">
+                    {item.initial_handover_by_staff_name ||
+                      item.created_by_staff_name ||
+                      'Unknown staff'}
+                  </p>
+
+                  {(item.initial_handover_by_staff_id ||
+                    item.created_by_staff_id) && (
+                    <p className="mt-1 text-xs font-semibold text-gray-500">
+                      Staff ID:{' '}
+                      {item.initial_handover_by_staff_id ||
+                        item.created_by_staff_id}
+                    </p>
+                  )}
+
+                  {item.created_at && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      {new Date(
+                        item.created_at
+                      ).toLocaleString(
+                        'en-GB',
+                        {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        }
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                <p className="mt-3 text-xs font-bold text-[#0078AE]">
+                  Open case →
+                </p>
+              </button>
+            )
+          })
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
+{observationHistoryModal && (
+  <div
+    className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 p-4"
+    onClick={() =>
+      setObservationHistoryModal(null)
+    }
+  >
+    <div
+      className="max-h-[88vh] w-full max-w-[620px] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl md:p-8"
+      onClick={(event) =>
+        event.stopPropagation()
+      }
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+            Observation Handover History
+          </p>
+
+          <h2 className="mt-1 text-2xl font-bold text-[#0078AE]">
+            Bed {observationHistoryModal.bed_no}
+          </h2>
+
+          {observationHistoryModal.ae_suffix && (
+            <p className="mt-1 text-sm font-semibold tracking-wider text-gray-500">
+              AE•••••
+              {observationHistoryModal.ae_suffix}
+            </p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            setObservationHistoryModal(null)
+          }
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-2xl font-bold text-gray-500"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="mt-6">
+        {observationHistoryLoading ? (
+          <div className="rounded-2xl bg-gray-50 p-6 text-center font-bold text-gray-500">
+            Loading history...
+          </div>
+        ) : observationHistoryLogs.length === 0 ? (
+          <div className="rounded-2xl bg-gray-50 p-6 text-center font-bold text-gray-400">
+            No action history yet
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {observationHistoryLogs.map(
+              (log) => {
+               const details =
+  getUnifiedActionDetails(log)
+
+                return (
+                  <div
+                    key={log.log_id}
+                    className="rounded-2xl border border-gray-200 bg-gray-50 p-4"
+                  >
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div>
+  <span
+    className={`inline-flex rounded-lg px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
+      log.source_type === 'Psychiatric'
+        ? 'bg-purple-100 text-purple-700'
+        : 'bg-blue-100 text-[#0078AE]'
+    }`}
+  >
+    {log.source_type || 'Observation'}
+  </span>
+
+  <p className="mt-2 font-bold text-gray-900">
+    {getUnifiedActionLabel(
+      log.action_type
+    )}
+  </p>
+                        <p className="mt-1 text-sm text-gray-600">
+                          By{' '}
+                          <span className="font-bold">
+                            {log.staff_name}
+                          </span>
+                        </p>
+                      </div>
+
+                      <p className="text-xs font-semibold text-gray-400">
+                        {new Date(
+                          log.created_at
+                        ).toLocaleString(
+                          'en-GB',
+                          {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          }
+                        )}
+                      </p>
+                    </div>
+
+                    {details.before !== null &&
+                      details.after !== null && (
+                        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <div className="rounded-xl bg-white p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                              Before
+                            </p>
+
+                            <p className="mt-1 whitespace-pre-wrap text-sm font-semibold text-gray-700">
+                              {details.before}
+                            </p>
+                          </div>
+
+                          <div className="rounded-xl bg-white p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                              After
+                            </p>
+
+                            <p className="mt-1 whitespace-pre-wrap text-sm font-semibold text-gray-700">
+                              {details.after}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                    {details.before === null &&
+                      details.after && (
+                        <div className="mt-4 rounded-xl bg-white p-3 text-sm font-semibold text-gray-700">
+                          {details.after}
+                        </div>
+                      )}
+                  </div>
+                )
+              }
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
 )}
 
 {detailModal && (
@@ -2233,43 +3908,166 @@ const linkedPsyCase = getLinkedPsyCase(item)
 
         {detailModal.nursing_handover &&
   detailModal.nursing_handover.trim() !== '' && (
-    <button
-      onClick={async () => {
-        const now = new Date().toISOString()
-        const handoverTags = getHandoverTags(detailModal)
-        const hasCT = handoverTags.some(isCTTag)
+   <button
+  onClick={async () => {
+    if (!currentStaff) {
+      alert('Staff login session not found')
+      return
+    }
 
-        const updatePayload = {
-          handover_done: handoverChecks
-        }
+    const now = new Date().toISOString()
 
-        if (hasCT) {
-          updatePayload.ct_status =
-            normalizeCTStatus(detailModal.ct_status)
-          updatePayload.ct_updated_at = now
-        }
+    const handoverTags =
+      getHandoverTags(detailModal)
 
-        const { error } = await supabase
-          .from('observation_cases')
-          .update(updatePayload)
-          .eq('id', detailModal.id)
+    const hasCT =
+      handoverTags.some(isCTTag)
 
-        if (error) {
-          console.error(
-            'Save checklist and CT status error:',
-            error
+    const oldChecklist =
+      detailModal.handover_done || {}
+
+    const newChecklist =
+      handoverChecks || {}
+
+    const oldCTStatus =
+      hasCT
+        ? normalizeCTStatus(
+            detailModal.original_ct_status
           )
-          alert('Unable to save changes')
-          return
-        }
+        : null
 
-        setDetailModal(null)
-        await fetchCases()
-      }}
-      className="w-full mt-6 bg-[#0078AE] text-white py-4 rounded-2xl font-bold hover:bg-[#00638F]"
-    >
-      Save Checklist
-    </button>
+    const newCTStatus =
+      hasCT
+        ? normalizeCTStatus(
+            detailModal.ct_status
+          )
+        : null
+
+    const checklistChanged =
+      JSON.stringify(oldChecklist) !==
+      JSON.stringify(newChecklist)
+
+    const ctStatusChanged =
+      hasCT &&
+      oldCTStatus !== newCTStatus
+
+    let actionType =
+      'OBS_HANDOVER_CHECKLIST_UPDATED'
+
+    if (checklistChanged && ctStatusChanged) {
+      actionType =
+        'OBS_HANDOVER_AND_CT_UPDATED'
+    } else if (ctStatusChanged) {
+      actionType =
+        'OBS_CT_STATUS_UPDATED'
+    }
+
+    const oldData = {
+      handover_done:
+        oldChecklist,
+
+      ct_status:
+        oldCTStatus
+    }
+
+    const newData = {
+      handover_done:
+        newChecklist,
+
+      ct_status:
+        newCTStatus
+    }
+
+    const updatePayload = {
+      handover_done:
+        newChecklist,
+
+      handover_updated_by_staff_member_id:
+        currentStaff.id,
+
+      handover_updated_by_staff_id:
+        currentStaff.staffId,
+
+      handover_updated_by_staff_name:
+        currentStaff.displayName,
+
+      handover_updated_at:
+        now,
+
+      handover_last_action_type:
+        actionType
+    }
+
+    if (hasCT) {
+      updatePayload.ct_status =
+        newCTStatus
+
+      updatePayload.ct_updated_at =
+        now
+    }
+
+    const { error } = await supabase
+      .from('observation_cases')
+      .update(updatePayload)
+      .eq('id', detailModal.id)
+
+    if (error) {
+      console.error(
+        'Save checklist and CT status error:',
+        error
+      )
+
+      alert('Unable to save changes')
+      return
+    }
+
+    try {
+      await writeAuditLog({
+        staff: currentStaff,
+
+        actionType,
+
+        entityType:
+          'observation_case',
+
+        entityId:
+          detailModal.id,
+
+        bedNo:
+          detailModal.bed_no,
+
+        oldData,
+        newData,
+
+        metadata: {
+          aeSuffix:
+            detailModal.ae_suffix || null,
+
+          diagnosis:
+            detailModal.diagnosis || null,
+
+          checklistChanged,
+          ctStatusChanged
+        }
+      })
+    } catch (auditError) {
+      console.error(
+        'Observation handover audit failed:',
+        auditError
+      )
+
+      alert(
+        'Changes saved, but audit log failed'
+      )
+    }
+
+    setDetailModal(null)
+    await fetchCases()
+  }}
+  className="w-full mt-6 bg-[#0078AE] text-white py-4 rounded-2xl font-bold hover:bg-[#00638F]"
+>
+  Save Checklist
+</button>
   )}
       </div>
     </div>
@@ -3126,6 +4924,151 @@ const linkedPsyCase = getLinkedPsyCase(item)
         >
           Save
         </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{psyHistoryModal && (
+  <div
+    className="fixed inset-0 z-[300] flex items-center justify-center bg-black/40 p-4"
+    onClick={() => setPsyHistoryModal(null)}
+  >
+    <div
+      className="w-full max-w-[620px] max-h-[88vh] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl md:p-8"
+      onClick={(event) =>
+        event.stopPropagation()
+      }
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
+            Psychiatric Case History
+          </p>
+
+          <h2 className="mt-1 text-2xl font-bold text-[#0078AE]">
+            {psyHistoryModal.bed_no
+              ? `Bed ${psyHistoryModal.bed_no}`
+              : psyHistoryModal.patient_label ||
+                'Ambulatory Case'}
+          </h2>
+
+          {psyHistoryModal.ae_suffix && (
+            <p className="mt-1 text-sm font-semibold tracking-wider text-gray-500">
+              AE•••••{psyHistoryModal.ae_suffix}
+            </p>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() =>
+            setPsyHistoryModal(null)
+          }
+          className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-2xl font-bold text-gray-500"
+        >
+          ×
+        </button>
+      </div>
+
+      <div className="mt-6">
+        {psyHistoryLoading ? (
+          <div className="rounded-2xl bg-gray-50 p-6 text-center font-bold text-gray-500">
+            Loading history...
+          </div>
+        ) : psyHistoryLogs.length === 0 ? (
+          <div className="rounded-2xl bg-gray-50 p-6 text-center font-bold text-gray-400">
+            No action history yet
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {psyHistoryLogs.map((log) => {
+             const details =
+  getUnifiedActionDetails(log)
+
+              return (
+                <div
+                  key={log.log_id}
+                  className="rounded-2xl border border-gray-200 bg-gray-50 p-4"
+                >
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+  <span
+    className={`inline-flex rounded-lg px-2 py-1 text-[10px] font-bold uppercase tracking-wide ${
+      log.source_type === 'Psychiatric'
+        ? 'bg-purple-100 text-purple-700'
+        : 'bg-blue-100 text-[#0078AE]'
+    }`}
+  >
+    {log.source_type || 'Psychiatric'}
+  </span>
+
+  <p className="mt-2 font-bold text-gray-900">
+                        {getUnifiedActionLabel(
+  log.action_type
+)}
+                      </p>
+
+                      <p className="mt-1 text-sm text-gray-600">
+                        By{' '}
+                        <span className="font-bold">
+                          {log.staff_name}
+                        </span>
+                      </p>
+                    </div>
+
+                    <p className="text-xs font-semibold text-gray-400">
+                      {new Date(
+                        log.created_at
+                      ).toLocaleString(
+                        'en-GB',
+                        {
+                          day: '2-digit',
+                          month: 'short',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        }
+                      )}
+                    </p>
+                  </div>
+
+{details.before !== null &&
+  details.after !== null && (
+                      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <div className="rounded-xl bg-white p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                            Before
+                          </p>
+
+                          <p className="mt-1 whitespace-pre-wrap text-sm font-semibold text-gray-700">
+                            {details.before}
+                          </p>
+                        </div>
+
+                        <div className="rounded-xl bg-white p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                            After
+                          </p>
+
+                          <p className="mt-1 whitespace-pre-wrap text-sm font-semibold text-gray-700">
+                            {details.after}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                  {details.before === null &&
+  details.after && (
+                      <div className="mt-4 rounded-xl bg-white p-3 text-sm font-semibold text-gray-700">
+                        {details.after}
+                      </div>
+                    )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   </div>
