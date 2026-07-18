@@ -3,7 +3,7 @@
   "name": "Psychiatric Handover",
   "short_name": "Psych Handover",
   "description": "Psychiatric Case Handover",
-  "start_url": "/psy",
+  "start_url": "/login",
   "scope": "/",
   "display": "standalone",
   "background_color": "#F5F5F7",
