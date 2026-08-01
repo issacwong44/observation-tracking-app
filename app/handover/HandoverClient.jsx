@@ -114,6 +114,9 @@ function getObservationActionLabel(actionType) {
     OBS_HANDOVER_ADDED:
       'Added to handover',
 
+      OBS_HANDOVER_ACTION_ADDED:
+  'Action added',
+
     OBS_HANDOVER_HIDDEN:
       'Hidden from handover'
 
@@ -143,6 +146,22 @@ function getObservationActionDetails(log) {
   const oldData = log.old_data || {}
   const newData = log.new_data || {}
 
+  if (
+  log.action_type ===
+  'OBS_HANDOVER_ACTION_ADDED'
+) {
+  return {
+    before:
+      oldData.nursing_handover || '-',
+
+    after:
+      newData.added_action
+        ? `Added: ${newData.added_action}\n\nCurrent handover: ${
+            newData.nursing_handover || '-'
+          }`
+        : newData.nursing_handover || '-'
+  }
+}
   if (
   log.action_type ===
   'OBS_CASE_CREATED'
@@ -389,6 +408,112 @@ function formatLastUpdatedTime(timestamp) {
   )
 }
 
+function getLatestLinkedUpdate({
+  observationCase,
+  psychiatricCase
+}) {
+  const updates = []
+
+  if (observationCase) {
+    if (
+      observationCase
+        .handover_updated_by_staff_name &&
+      observationCase.handover_updated_at
+    ) {
+      updates.push({
+        source: 'Observation',
+
+        staffName:
+          observationCase
+            .handover_updated_by_staff_name,
+
+        staffId:
+          observationCase
+            .handover_updated_by_staff_id,
+
+        actionType:
+          observationCase
+            .handover_last_action_type,
+
+        actionLabel:
+          getObservationActionLabel(
+            observationCase
+              .handover_last_action_type
+          ),
+
+        updatedAt:
+          observationCase
+            .handover_updated_at
+      })
+    }
+
+    if (
+      observationCase.created_by_staff_name &&
+      observationCase.created_at
+    ) {
+      updates.push({
+        source: 'Observation',
+
+        staffName:
+          observationCase
+            .created_by_staff_name,
+
+        staffId:
+          observationCase
+            .created_by_staff_id,
+
+        actionType:
+          'OBS_CASE_CREATED',
+
+        actionLabel:
+          'Case created',
+
+        updatedAt:
+          observationCase.created_at
+      })
+    }
+  }
+
+  if (
+    psychiatricCase &&
+    psychiatricCase.updated_by_staff_name &&
+    psychiatricCase.updated_by_at
+  ) {
+    updates.push({
+      source: 'Psychiatric',
+
+      staffName:
+        psychiatricCase
+          .updated_by_staff_name,
+
+      staffId:
+        psychiatricCase
+          .updated_by_staff_id,
+
+      actionType:
+        psychiatricCase.last_action_type,
+
+      actionLabel:
+        getPsyActionLabel(
+          psychiatricCase.last_action_type
+        ),
+
+      updatedAt:
+        psychiatricCase.updated_by_at
+    })
+  }
+
+  if (updates.length === 0) {
+    return null
+  }
+
+  return updates.sort(
+    (a, b) =>
+      new Date(b.updatedAt) -
+      new Date(a.updatedAt)
+  )[0]
+}
+
 export default function HandoverPage({
   initialTab = 'observation'
 }) {
@@ -404,6 +529,12 @@ const [saveStatus, setSaveStatus] = useState({})
 const [isEditingNote, setIsEditingNote] = useState(false)
   const [detailModal, setDetailModal] = useState(null)
 const [handoverChecks, setHandoverChecks] = useState({})
+
+const [newHandoverAction, setNewHandoverAction] =
+  useState('')
+
+const [addingHandoverAction, setAddingHandoverAction] =
+  useState(false)
 
 const [
   observationHistoryModal,
@@ -612,6 +743,8 @@ useEffect(() => {
   }
 
 async function openObservationDetail(item) {
+  setNewHandoverAction('')
+setAddingHandoverAction(false)
   setDetailModal({
     ...item,
     original_ct_status:
@@ -689,6 +822,268 @@ async function openObservationHistory(item) {
 
   setObservationHistoryLogs(data || [])
   setObservationHistoryLoading(false)
+}
+
+async function addObservationHandoverAction() {
+  if (!detailModal || addingHandoverAction) {
+    return
+  }
+
+  if (!currentStaff) {
+    alert('Staff login session not found')
+    return
+  }
+
+  const normalizedAction =
+    newHandoverAction
+      .trim()
+      .replace(/\s+/g, ' ')
+
+  if (!normalizedAction) {
+    alert('Please enter an action')
+    return
+  }
+
+  if (isCTTag(normalizedAction)) {
+    alert(
+      'CT status should be managed through the CT workflow'
+    )
+    return
+  }
+
+  const existingTags =
+    getHandoverTags(detailModal)
+
+  const alreadyExists =
+    existingTags.some(
+      (tag) =>
+        tag.trim().toLowerCase() ===
+        normalizedAction.toLowerCase()
+    )
+
+  if (alreadyExists) {
+    alert('This action already exists')
+    return
+  }
+
+  setAddingHandoverAction(true)
+
+  const now =
+    new Date().toISOString()
+
+  const updatedTags = [
+    ...existingTags,
+    normalizedAction
+  ]
+
+  const oldHandover =
+    detailModal.nursing_handover || ''
+
+  const newHandover =
+    updatedTags.join(', ')
+
+  const oldChecklist =
+    detailModal.handover_done || {}
+
+  const newChecklist = {
+    ...oldChecklist,
+    [normalizedAction]: false
+  }
+
+  const { error } = await supabase
+    .from('observation_cases')
+    .update({
+      nursing_handover:
+        newHandover,
+
+      handover_done:
+        newChecklist,
+
+      handover_manual:
+        true,
+
+      handover_hidden:
+        false,
+
+      handover_seen:
+        false,
+
+      handover_seen_at:
+        null,
+
+      handover_updated_by_staff_member_id:
+        currentStaff.id,
+
+      handover_updated_by_staff_id:
+        currentStaff.staffId,
+
+      handover_updated_by_staff_name:
+        currentStaff.displayName,
+
+      handover_updated_at:
+        now,
+
+      handover_last_action_type:
+        'OBS_HANDOVER_ACTION_ADDED'
+    })
+    .eq('id', detailModal.id)
+
+  if (error) {
+    console.error(
+      'Add handover action error:',
+      error
+    )
+
+    alert('Unable to add action')
+    setAddingHandoverAction(false)
+    return
+  }
+
+  try {
+    await writeAuditLog({
+      staff:
+        currentStaff,
+
+      actionType:
+        'OBS_HANDOVER_ACTION_ADDED',
+
+      entityType:
+        'observation_case',
+
+      entityId:
+        detailModal.id,
+
+      bedNo:
+        detailModal.bed_no,
+
+      oldData: {
+        nursing_handover:
+          oldHandover,
+
+        handover_done:
+          oldChecklist
+      },
+
+      newData: {
+        nursing_handover:
+          newHandover,
+
+        handover_done:
+          newChecklist,
+
+        added_action:
+          normalizedAction
+      },
+
+      metadata: {
+        aeSuffix:
+          detailModal.ae_suffix || null,
+
+        diagnosis:
+          detailModal.diagnosis || null,
+
+        source:
+          'observation_handover_modal'
+      }
+    })
+  } catch (auditError) {
+    console.error(
+      'Add handover action audit failed:',
+      auditError
+    )
+
+    alert(
+      'Action added, but audit log failed'
+    )
+  }
+
+  setDetailModal((previous) => ({
+    ...previous,
+
+    nursing_handover:
+      newHandover,
+
+    handover_done:
+      newChecklist,
+
+    handover_manual:
+      true,
+
+    handover_hidden:
+      false,
+
+    handover_seen:
+      false,
+
+    handover_seen_at:
+      null,
+
+    handover_updated_by_staff_member_id:
+      currentStaff.id,
+
+    handover_updated_by_staff_id:
+      currentStaff.staffId,
+
+    handover_updated_by_staff_name:
+      currentStaff.displayName,
+
+    handover_updated_at:
+      now,
+
+    handover_last_action_type:
+      'OBS_HANDOVER_ACTION_ADDED'
+  }))
+
+  setHandoverChecks(
+    newChecklist
+  )
+
+  setCases((previous) =>
+    previous.map((item) =>
+      String(item.id) ===
+      String(detailModal.id)
+        ? {
+            ...item,
+
+            nursing_handover:
+              newHandover,
+
+            handover_done:
+              newChecklist,
+
+            handover_manual:
+              true,
+
+            handover_hidden:
+              false,
+
+            handover_seen:
+              false,
+
+            handover_seen_at:
+              null,
+
+            handover_updated_by_staff_member_id:
+              currentStaff.id,
+
+            handover_updated_by_staff_id:
+              currentStaff.staffId,
+
+            handover_updated_by_staff_name:
+              currentStaff.displayName,
+
+            handover_updated_at:
+              now,
+
+            handover_last_action_type:
+              'OBS_HANDOVER_ACTION_ADDED'
+          }
+        : item
+    )
+  )
+
+  setNewHandoverAction('')
+  setAddingHandoverAction(false)
 }
 
 function getHandoverTags(item) {
@@ -2512,6 +2907,12 @@ const hasOutstandingHandover =
   })
 
 const linkedPsyCase = getLinkedPsyCase(item)
+
+const latestLinkedUpdate =
+  getLatestLinkedUpdate({
+    observationCase: item,
+    psychiatricCase: linkedPsyCase
+  })
     
 
   return (
@@ -2612,38 +3013,36 @@ const linkedPsyCase = getLinkedPsyCase(item)
   </span>
 </div>
 
-{(
-  item.handover_updated_by_staff_name ||
-  item.created_by_staff_name
-) && (
+{latestLinkedUpdate && (
   <div className="mt-4 border-t border-gray-200 pt-3">
     <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
       Last update
     </p>
 
     <p className="mt-1 text-xs font-bold text-gray-800">
-      {item.handover_updated_by_staff_name ||
-        item.created_by_staff_name}
+      {latestLinkedUpdate.staffName}
     </p>
 
     <p className="mt-1 text-[11px] leading-4 text-gray-500">
-      {item.handover_last_action_type
-        ? getObservationActionLabel(
-            item.handover_last_action_type
-          )
-        : 'Case created'}
+      {latestLinkedUpdate.actionLabel}
 
-      {(item.handover_updated_at ||
-        item.created_at) && (
-        <>
-          {' · '}
-          {formatLastUpdatedTime(
-            item.handover_updated_at ||
-              item.created_at
-          )}
-        </>
+      {' · '}
+
+      {formatLastUpdatedTime(
+        latestLinkedUpdate.updatedAt
       )}
     </p>
+
+    <span
+      className={`mt-2 inline-flex rounded-lg px-2 py-1 text-[9px] font-bold uppercase ${
+        latestLinkedUpdate.source ===
+        'Psychiatric'
+          ? 'bg-purple-100 text-purple-700'
+          : 'bg-blue-100 text-[#0078AE]'
+      }`}
+    >
+      {latestLinkedUpdate.source}
+    </span>
 
     <button
       type="button"
@@ -2651,7 +3050,7 @@ const linkedPsyCase = getLinkedPsyCase(item)
         event.stopPropagation()
         openObservationHistory(item)
       }}
-      className="mt-2 text-[11px] font-bold text-[#0078AE] hover:underline"
+      className="mt-2 block text-[11px] font-bold text-[#0078AE] hover:underline"
     >
       View History
     </button>
@@ -3011,6 +3410,15 @@ const linkedPsyCase = getLinkedPsyCase(item)
   const linkedObservationCase =
     getLinkedObservationCase(item)
 
+    const latestLinkedUpdate =
+  getLatestLinkedUpdate({
+    observationCase:
+      linkedObservationCase,
+
+    psychiatricCase:
+      item
+  })
+
   return (
 <div
   key={item.id}
@@ -3082,37 +3490,44 @@ const linkedPsyCase = getLinkedPsyCase(item)
   </span>
 </div>
 
-{item.updated_by_staff_name && (
+{latestLinkedUpdate && (
   <div className="mt-3 border-t border-gray-200 pt-3">
     <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
       Last update
     </p>
 
     <p className="mt-1 text-xs font-bold text-gray-800">
-      {item.updated_by_staff_name}
+      {latestLinkedUpdate.staffName}
     </p>
 
     <p className="mt-1 text-[11px] leading-4 text-gray-500">
-      {getPsyActionLabel(
-        item.last_action_type
-      )}
+      {latestLinkedUpdate.actionLabel}
 
-      {item.updated_by_at && (
-        <>
-          {' · '}
-          {formatLastUpdatedTime(
-            item.updated_by_at
-          )}
-        </>
+      {' · '}
+
+      {formatLastUpdatedTime(
+        latestLinkedUpdate.updatedAt
       )}
     </p>
-     <button
+
+    <span
+      className={`mt-2 inline-flex rounded-lg px-2 py-1 text-[9px] font-bold uppercase ${
+        latestLinkedUpdate.source ===
+        'Psychiatric'
+          ? 'bg-purple-100 text-purple-700'
+          : 'bg-blue-100 text-[#0078AE]'
+      }`}
+    >
+      {latestLinkedUpdate.source}
+    </span>
+
+    <button
       type="button"
       onClick={(event) => {
         event.stopPropagation()
         openPsyHistory(item)
       }}
-      className="mt-2 text-[11px] font-bold text-[#0078AE] hover:underline"
+      className="mt-2 block text-[11px] font-bold text-[#0078AE] hover:underline"
     >
       View History
     </button>
@@ -3728,11 +4143,11 @@ const linkedPsyCase = getLinkedPsyCase(item)
 
 {detailModal && (
   <div
-    className="fixed inset-0 bg-black/40 flex items-center justify-center z-[200]"
+     className="fixed inset-0 z-[200] flex items-start justify-center overflow-y-auto bg-black/40 p-4 md:items-center"
     onClick={() => setDetailModal(null)}
   >
     <div
-      className="bg-white rounded-3xl p-8 w-[90vw] max-w-[520px] shadow-2xl"
+      className="my-4 max-h-[92vh] w-[90vw] max-w-[520px] overflow-y-auto rounded-3xl bg-white p-6 shadow-2xl md:my-0 md:p-8"
       onClick={(e) => e.stopPropagation()}
     >
       <div className="flex justify-between items-center mb-6">
@@ -3909,6 +4324,70 @@ const linkedPsyCase = getLinkedPsyCase(item)
       </div>
     </div>
   )}
+
+<div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
+  <p className="font-bold text-[#0078AE]">
+    Add Action
+  </p>
+
+  <p className="mt-1 text-sm text-gray-500">
+    Add a new pending task to this handover.
+  </p>
+
+  <div className="mt-4 grid grid-cols-2 gap-2">
+    {[
+      'AOM',
+      'X-ray',
+      'Blood',
+      'ECG',
+      'Urine',
+    ].map((action) => (
+      <button
+        key={action}
+        type="button"
+        onClick={() =>
+          setNewHandoverAction(action)
+        }
+        className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
+          newHandoverAction === action
+            ? 'border-[#0078AE] bg-[#0078AE] text-white'
+            : 'border-blue-100 bg-white text-[#0078AE] hover:bg-blue-100'
+        }`}
+      >
+        {action}
+      </button>
+    ))}
+  </div>
+
+  <input
+    type="text"
+    value={newHandoverAction}
+    onChange={(event) => {
+      setNewHandoverAction(
+        event.target.value
+      )
+    }}
+    placeholder="Enter another action..."
+    maxLength={80}
+    className="mt-3 w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-gray-900 outline-none focus:border-[#0078AE] focus:ring-2 focus:ring-blue-100"
+  />
+
+  <button
+    type="button"
+    disabled={
+      addingHandoverAction ||
+      !newHandoverAction.trim()
+    }
+    onClick={
+      addObservationHandoverAction
+    }
+    className="mt-3 w-full rounded-xl bg-white px-4 py-3 font-bold text-[#0078AE] shadow-sm transition hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+  >
+    {addingHandoverAction
+      ? 'Adding...'
+      : '+ Add Action'}
+  </button>
+</div>
 
         {detailModal.nursing_handover &&
   detailModal.nursing_handover.trim() !== '' && (
